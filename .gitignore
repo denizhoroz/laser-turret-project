@@ -1,1 +1,7 @@
-venv/
+datasets/
+
+model_train/yolo26n.pt
+model_train/yolo26s.pt
+model_train/runs/
+
+model_venv/
