@@ -1,7 +1,10 @@
-datasets/
+model_building/datasets/
+model_building/model_train/yolo26n.pt
+model_building/model_train/yolo26s.pt
+model_building/model_train/runs/
+model_building/model_venv/
 
-model_train/yolo26n.pt
-model_train/yolo26s.pt
-model_train/runs/
+jetson_mission_codes/venv
 
-model_venv/
+ground_station/
+ground_station/venv

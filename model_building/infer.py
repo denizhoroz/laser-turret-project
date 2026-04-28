@@ -22,7 +22,7 @@ def main():
     ap.add_argument("--source", type=str, default="0",
                     help="webcam index (e.g. 0) or video file path")
     ap.add_argument("--imgsz", type=int, default=640)
-    ap.add_argument("--conf", type=float, default=0.25)
+    ap.add_argument("--conf", type=float, default=0.50)
     ap.add_argument("--iou", type=float, default=0.45)
     ap.add_argument("--device", type=str,
                     default="cuda" if torch.cuda.is_available() else "cpu")
@@ -37,7 +37,7 @@ def main():
     cap = cv2.VideoCapture(parse_source(args.source))
     assert cap.isOpened(), f"cannot open source: {args.source}"
 
-    win = "YOLO26s inference - q/ESC to quit"
+    win = "YOLO26s inference"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
 
     prev = time.time()
@@ -46,8 +46,8 @@ def main():
         while True:
             ok, frame = cap.read()
             if not ok:
-                print("stream end")
-                break
+                print("stream ended or cannot read frame")
+                continue
 
             results = model.predict(
                 frame,
