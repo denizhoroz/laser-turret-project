@@ -5,6 +5,4 @@ model_building/model_train/runs/
 model_building/model_venv/
 
 jetson_mission_codes/venv
-
-ground_station/
 ground_station/venv

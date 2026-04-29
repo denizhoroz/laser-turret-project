@@ -1,0 +1,47 @@
+<section aria-label="Telemetry" class="bg-zinc-950 border border-zinc-800 p-4 flex-1">
+  <h2 class="text-xs uppercase tracking-wider text-zinc-500 mb-3">Telemetry</h2>
+
+  <div class="space-y-3 text-sm">
+
+    <div>
+      <div class="text-zinc-500 text-xs mb-1">Limit Switches</div>
+      <div class="grid grid-cols-4 gap-2" id="limit-switches">
+        {% for i in range(4) %}
+        <div class="flex flex-col items-center px-2 py-2 bg-black border border-zinc-800" data-sw="{{ i }}">
+          <span class="text-[10px] text-zinc-500">SW{{ i + 1 }}</span>
+          <span class="w-2 h-2 bg-zinc-700 mt-1" data-led></span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="flex justify-between items-center">
+      <span class="text-zinc-400">Jetson Temp</span>
+      <span id="t-temp" class="font-mono tabular-nums text-zinc-200">— °C</span>
+    </div>
+
+    <div class="flex justify-between items-center">
+      <span class="text-zinc-400">Yaw Dir</span>
+      <span id="t-yaw" class="font-mono text-zinc-200">—</span>
+    </div>
+
+    <div class="flex justify-between items-center">
+      <span class="text-zinc-400">Pitch Dir</span>
+      <span id="t-pitch" class="font-mono text-zinc-200">—</span>
+    </div>
+
+    <div class="flex justify-between items-center">
+      <span class="text-zinc-400">Laser</span>
+      <span class="inline-flex items-center gap-2">
+        <span id="t-laser-dot" class="w-2 h-2 bg-zinc-700"></span>
+        <span id="t-laser-text" class="text-zinc-200">—</span>
+      </span>
+    </div>
+
+    <div class="flex justify-between items-center">
+      <span class="text-zinc-400">State</span>
+      <span id="t-state" class="font-medium text-zinc-200">—</span>
+    </div>
+
+  </div>
+</section>

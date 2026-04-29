@@ -36,7 +36,7 @@ class Mission1:
         # Start mission loop
 
         self.system_state.set_state("scanning")
-        while True:
+        while not self.system_state.stop_requested:
             ## Mission logic ##
             # 1) Start scanning
             # 2) If at least one target detected, check if its not in the target pool
@@ -94,7 +94,8 @@ class Mission1:
                 self.system_state.set_state("scanning")
                 self.system_state.send_data("is_firing", False)
 
-            detector.display(frame, boxes, tracker=tracker, selected_id=self.selected_target_id, offset=self.offset) # debug
+            self.system_state.send_frame(frame, boxes)
+            # detector.display(frame, boxes, tracker=tracker, selected_id=self.selected_target_id, offset=self.offset) # local cv window (disabled — viewing on web)
 
     def is_target_in_pool(self, target_id):
         """Checks if the target ID is in the target pool."""

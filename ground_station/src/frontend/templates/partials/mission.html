@@ -1,0 +1,28 @@
+<section aria-label="Mission control" class="bg-zinc-950 border border-zinc-800 p-4">
+  <h2 class="text-xs uppercase tracking-wider text-zinc-500 mb-3">Mission Control</h2>
+
+  <fieldset class="space-y-2 mb-4">
+    <legend class="sr-only">Mission type</legend>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="radio" name="mission" value="1" checked class="accent-lime-400" />
+      <span class="text-sm">Mission 1</span>
+    </label>
+    <label class="flex items-center gap-2 cursor-pointer">
+      <input type="radio" name="mission" value="2" class="accent-lime-400" />
+      <span class="text-sm">Mission 2</span>
+    </label>
+  </fieldset>
+
+  <div class="flex gap-2">
+    <button id="btn-start" type="button"
+      class="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-lime-400 hover:bg-lime-300 active:bg-lime-500 disabled:opacity-50 disabled:cursor-not-allowed text-black text-sm font-semibold transition-colors">
+      <i data-lucide="play" class="w-4 h-4"></i>
+      <span>Start</span>
+    </button>
+    <button id="btn-stop" type="button"
+      class="flex-1 inline-flex items-center justify-center gap-2 px-3 py-2 bg-zinc-900 hover:bg-zinc-800 active:bg-zinc-950 border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed text-zinc-200 text-sm font-semibold transition-colors">
+      <i data-lucide="square" class="w-4 h-4"></i>
+      <span>Stop</span>
+    </button>
+  </div>
+</section>

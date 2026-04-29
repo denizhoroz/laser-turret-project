@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ground Station</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-black text-zinc-200 min-h-screen font-sans">
+
+  {% include "partials/header.html" %}
+
+  <main class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 p-4">
+    <aside class="flex flex-col gap-4 order-2 lg:order-1">
+      {% include "partials/mission.html" %}
+      {% include "partials/telemetry.html" %}
+    </aside>
+    {% include "partials/video.html" %}
+  </main>
+
+  {% include "partials/log.html" %}
+
+  <script type="module" src="/static/js/app.js"></script>
+  <script>lucide.createIcons();</script>
+</body>
+</html>
