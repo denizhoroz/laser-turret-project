@@ -5,16 +5,19 @@ const int stepPin1 = 12;
 const int dirPin1 = 11; 
 const int stepPin2 = 10;
 const int dirPin2 = 9;
+const int laserPin = 2;
 
 // Parameters
-const int stepsPerRev = 200; // Standard for 1.8 degree motors
-const int pulseWidth = 800;  // Lower = Faster speed
+const int pulseWidth = 1600;  // Lower = Faster speed
+const int rotateAngle = 90;
+const int stepsPerRev = 200 / (360 / rotateAngle); // Standard for 1.8 degree motors
 
 void setup() {
   pinMode(stepPin1, OUTPUT);
   pinMode(dirPin1, OUTPUT);
   pinMode(stepPin2, OUTPUT);
   pinMode(dirPin2, OUTPUT);
+  pinMode(laserPin, OUTPUT);
 }
 
 void loop() {
@@ -25,28 +28,60 @@ void loop() {
   // Spin one full revolution
   for(int x = 0; x < stepsPerRev; x++) {
     digitalWrite(stepPin1, HIGH);
-    digitalWrite(stepPin2, HIGH);
     delayMicroseconds(pulseWidth); 
     digitalWrite(stepPin1, LOW);
+    delayMicroseconds(pulseWidth);
+  }
+
+  delay(1000); // Wait a second
+  digitalWrite(laserPin, HIGH);
+  delay(1000); // Wait a second
+  digitalWrite(laserPin, LOW);
+  delay(1000); // Wait a second
+
+  // Spin back one full revolution
+  for(int x = 0; x < stepsPerRev; x++) {
+    digitalWrite(stepPin2, HIGH);
+    delayMicroseconds(pulseWidth); 
     digitalWrite(stepPin2, LOW);
     delayMicroseconds(pulseWidth);
   }
 
   delay(1000); // Wait a second
+  digitalWrite(laserPin, HIGH);
+  delay(1000); // Wait a second
+  digitalWrite(laserPin, LOW);
+  delay(1000); // Wait a second
 
-  // Set direction counter-clockwise
+  // Set direction clockwise
   digitalWrite(dirPin1, LOW);
   digitalWrite(dirPin2, LOW);
 
-  // Spin back one full revolution
+  // Spin one full revolution
   for(int x = 0; x < stepsPerRev; x++) {
     digitalWrite(stepPin1, HIGH);
-    digitalWrite(stepPin2, HIGH);
     delayMicroseconds(pulseWidth); 
     digitalWrite(stepPin1, LOW);
+    delayMicroseconds(pulseWidth);
+  }
+
+  delay(1000); // Wait a second
+  digitalWrite(laserPin, HIGH);
+  delay(1000); // Wait a second
+  digitalWrite(laserPin, LOW);
+  delay(1000); // Wait a second
+
+  // Spin back one full revolution
+  for(int x = 0; x < stepsPerRev; x++) {
+    digitalWrite(stepPin2, HIGH);
+    delayMicroseconds(pulseWidth); 
     digitalWrite(stepPin2, LOW);
     delayMicroseconds(pulseWidth);
   }
 
-  delay(1000);
+  delay(1000); // Wait a second
+  digitalWrite(laserPin, HIGH);
+  delay(1000); // Wait a second
+  digitalWrite(laserPin, LOW);
+  delay(1000); // Wait a second
 }

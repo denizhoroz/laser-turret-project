@@ -4,11 +4,13 @@ import time
 
 from packages.missions.m1 import Mission1
 from packages.missions.m2 import Mission2
+from packages.missions.test_detect import TestDetect
+
 
 class SystemState:
     """Class to manage the state of the system."""
 
-    def __init__(self, link=None):
+    def __init__(self, link=None, arduino=None):
         self.system_state = "idle"  # Possible states: idle, scanning, tracking, firing
         self.system_mission = "none"  # Possible missions: m1, m2, none
         self.system_data = {}  # Dictionary to hold any relevant data for the missions
@@ -17,6 +19,7 @@ class SystemState:
         self._last_frame_ts: float = 0.0
         self.frame_target_fps: float = 10.0
         self.frame_jpeg_quality: int = 70
+        self.Arduino = arduino
 
     def set_state(self, new_state: str):
         """Sets the current state of the system."""
@@ -31,7 +34,7 @@ class SystemState:
 
     def set_mission(self, new_mission: str):
         """Sets the current mission of the system."""
-        valid_missions = ["m1", "m2", "none"]
+        valid_missions = ["m1", "m2", "td", "none"]
         if new_mission not in valid_missions:
             raise ValueError(f"Invalid mission: {new_mission}. Valid missions are: {valid_missions}")
         self.system_mission = new_mission
@@ -43,6 +46,11 @@ class SystemState:
         self.system_data[key] = value
         if self.link:
             self.link.send({"type": "data", "key": key, "value": value})
+        if self.Arduino:
+            try:
+                self.Arduino.send({"type": "data", "key": key, "value": value})
+            except Exception as e:
+                print(f"[arduino send error] {e}")
 
     def send_frame(self, frame, boxes):
         """JPEG-encodes the frame, attaches detections, sends over link.
@@ -70,6 +78,7 @@ class SystemState:
             box_data.append({
                 "bbox": [int(x1), int(y1), int(x2 - x1), int(y2 - y1)],
                 "cls": int(b.class_id) if b.class_id is not None else None,
+                "name": getattr(b, "class_name", None),
                 "conf": float(b.confidence) if b.confidence is not None else None,
             })
         self.link.send({
@@ -94,6 +103,8 @@ class SystemState:
                 Mission1(self).start()
             elif mission == "m2":
                 Mission2(self).start()
+            elif mission == "td":
+                TestDetect(self).start()
             else:
                 self.set_state("idle")
         finally:

@@ -8,11 +8,12 @@ from packages import tracker
 from packages.config import DEFAULT_WEIGHTS, DEVICE, CAMERA
 
 class BoundingBox:
-    """Represents a bounding box with coordinates, class ID, and confidence score."""
-    def __init__(self, xyxy, class_id=None, confidence=None):
+    """Represents a bounding box with coordinates, class ID, name, and confidence."""
+    def __init__(self, xyxy, class_id=None, confidence=None, class_name=None):
         self.xyxy = xyxy  # [x1, y1, x2, y2]
         self.class_id = class_id
         self.confidence = confidence
+        self.class_name = class_name
 
 class Detector:
     """YOLO26s object detector for video stream inference.
@@ -78,10 +79,19 @@ class Detector:
             cls_ids = results[0].boxes.cls.tolist() if results[0].boxes.cls is not None else []
             confs = results[0].boxes.conf.tolist() if results[0].boxes.conf is not None else []
 
+            names_map = self.model.names if hasattr(self.model, "names") else {}
             for idx, coords in enumerate(xyxy):
+                cid = cls_ids[idx] if idx < len(cls_ids) else None
+                cname = None
+                if cid is not None:
+                    try:
+                        cname = names_map[int(cid)]
+                    except (KeyError, IndexError, TypeError):
+                        cname = None
                 box = BoundingBox(xyxy=coords,
-                                  class_id=cls_ids[idx] if idx < len(cls_ids) else None,
-                                  confidence=confs[idx] if idx < len(confs) else None)
+                                  class_id=cid,
+                                  confidence=confs[idx] if idx < len(confs) else None,
+                                  class_name=cname)
                 boxes.append(box)
 
         return frame, boxes

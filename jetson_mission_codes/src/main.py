@@ -11,12 +11,19 @@ import threading
 
 from packages.link import Link
 from packages.state import SystemState
+from packages.config import ARDUINO_BAUDRATE, ARDUINO_PORT
+from packages.serial import ArduLink
 
 
-MISSION_MAP = {1: "m1", 2: "m2", "1": "m1", "2": "m2", "m1": "m1", "m2": "m2"}
+MISSION_MAP = {
+    1: "m1", 2: "m2", 3: "td",
+    "1": "m1", "2": "m2", "3": "td",
+    "m1": "m1", "m2": "m2", "td": "td",
+}
 
 
 def main():
+    # Connecting to the ground station
     host = os.environ.get("GS_HOST", "127.0.0.1")
     port = int(os.environ.get("GS_PORT", "9001"))
 
@@ -25,7 +32,10 @@ def main():
     link.connect()
     print("[jetson] connected")
 
-    system_state = SystemState(link=link)
+    # Connecting to the Arduino and initializing system state
+    arduino = ArduLink(port=ARDUINO_PORT, baudrate=ARDUINO_BAUDRATE)
+
+    system_state = SystemState(link=link, arduino=arduino)
     link.send({"type": "hello", "node": "jetson"})
     link.send({"type": "state", "state": system_state.system_state})
 

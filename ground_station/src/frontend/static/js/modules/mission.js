@@ -18,31 +18,40 @@ function selectedMission() {
   return checked ? Number(checked.value) : 1;
 }
 
-async function withBusy(btn, fn) {
-  btn.disabled = true;
-  try { await fn(); }
-  finally { btn.disabled = false; }
+export function setStarted(started) {
+  const startBtn = els.btnStart;
+  const label = startBtn.querySelector('span');
+  startBtn.disabled = started;
+  startBtn.classList.toggle('opacity-50', started);
+  startBtn.classList.toggle('cursor-not-allowed', started);
+  if (label) label.textContent = started ? 'Started' : 'Start';
 }
 
 export function initMission() {
-  els.btnStart.addEventListener('click', () => withBusy(els.btnStart, async () => {
+  els.btnStart.addEventListener('click', async () => {
     const mission = selectedMission();
     logLine('info', `Mission ${mission} → start`);
+    setStarted(true);
     try {
       await postJSON('/api/mission/start', { mission_type: mission });
       logLine('ok', `Mission ${mission} dispatched`);
     } catch (e) {
       logLine('err', `Start failed: ${e.message}`);
+      setStarted(false); // re-enable on failure
     }
-  }));
+  });
 
-  els.btnStop.addEventListener('click', () => withBusy(els.btnStop, async () => {
+  els.btnStop.addEventListener('click', async () => {
     logLine('info', 'Mission → stop');
+    els.btnStop.disabled = true;
     try {
       await postJSON('/api/mission/stop');
       logLine('ok', 'Stop dispatched');
     } catch (e) {
       logLine('err', `Stop failed: ${e.message}`);
+    } finally {
+      els.btnStop.disabled = false;
+      setStarted(false);
     }
-  }));
+  });
 }

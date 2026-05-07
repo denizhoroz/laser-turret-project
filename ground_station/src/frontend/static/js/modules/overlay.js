@@ -59,7 +59,8 @@ function draw() {
     ctx.strokeStyle = STROKE;
     ctx.strokeRect(X, Y, W, H);
 
-    const label = d.conf != null ? `${d.cls ?? ''} ${(d.conf * 100).toFixed(0)}%` : (d.cls ?? '');
+    const tag = d.name ?? (d.cls != null ? String(d.cls) : '');
+    const label = d.conf != null ? `${tag} ${(d.conf * 100).toFixed(0)}%` : tag;
     if (label.trim()) {
       const pad = 4 * dpr;
       const tw = ctx.measureText(label).width + pad * 2;

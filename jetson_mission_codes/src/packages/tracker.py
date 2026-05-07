@@ -1,3 +1,5 @@
+from packages.config import TCAREA_RATIO
+
 
 class Rectangle:
     """A rectangle class."""
@@ -13,10 +15,11 @@ class Rectangle:
 class Tracker:
     """Tracker for measuring the position of the target in the frame and calculating the necessary angles for the turret to aim at the target."""
 
-    def __init__(self, window_size: tuple = (640, 480)):
-        
+    def __init__(self, window_size: tuple = (640, 480), tcarea_ratio: float = TCAREA_RATIO):
+        """tcarea_ratio: side length of TCArea as fraction of bbox side."""
         self.window_size = window_size
         self.center = (self.window_size[0] // 2, self.window_size[1] // 2)
+        self.tcarea_ratio = tcarea_ratio
 
     def track(self, box):
         """Tracks the target based on the detected bounding box and calculates the necessary angles for the turret.
@@ -29,15 +32,19 @@ class Tracker:
         x1, y1, x2, y2 = map(int, box.xyxy)
 
         # - Target Center Point
-        self.TCPoint = ((x1 + x2) // 2, (y1 + y2) // 2) 
+        self.TCPoint = ((x1 + x2) // 2, (y1 + y2) // 2)
 
-        # - Target Center Area, a smaller rectangle around the target center point to account for some movement and noise
-        self.TCArea =  Rectangle(       
-                x=self.TCPoint[0] - 20,
-                y=self.TCPoint[1] - 20,
-                width=40,
-                height=40
-            )
+        # - Target Center Area: rectangle scaled to bbox size via tcarea_ratio.
+        bbox_w = max(1, x2 - x1)
+        bbox_h = max(1, y2 - y1)
+        tc_w = max(1, int(bbox_w * self.tcarea_ratio))
+        tc_h = max(1, int(bbox_h * self.tcarea_ratio))
+        self.TCArea = Rectangle(
+            x=self.TCPoint[0] - tc_w // 2,
+            y=self.TCPoint[1] - tc_h // 2,
+            width=tc_w,
+            height=tc_h,
+        )
 
         # Calculate offset from the center of the screen to the center area of the detected box
         offset_x = self.TCPoint[0] - self.center[0]

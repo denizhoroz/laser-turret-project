@@ -13,7 +13,6 @@ import asyncio
 import json
 import logging
 import os
-import random
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Set
@@ -24,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from .link import JetsonLink
+from link import JetsonLink
 
 log = logging.getLogger("ground_station")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -35,7 +34,7 @@ STATIC_DIR = FRONTEND_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
-MISSION_TYPE_MAP = {1: "m1", 2: "m2"}
+MISSION_TYPE_MAP = {1: "m1", 2: "m2", 3: "td"}
 
 
 class WSManager:
@@ -110,44 +109,13 @@ jetson_link.on_message = on_jetson_message
 jetson_link.on_connect = on_jetson_connect
 
 
-async def fake_telemetry_loop() -> None:
-    """Synthetic telemetry while Jetson is not connected."""
-    statuses = ["Online", "Scanning", "Targeting", "Firing"]
-    tick = 0
-    try:
-        while True:
-            await asyncio.sleep(0.5)
-            if jetson_link.connected:
-                continue  # real link in charge
-            tick += 1
-            await ws_manager.broadcast({
-                "type": "telemetry",
-                "data": {
-                    "limit_switches": [bool(random.getrandbits(1)) for _ in range(4)],
-                    "temp": 40 + random.randint(0, 25),
-                    "yaw_dir": random.choice([-1, 0, 1]),
-                    "pitch_dir": random.choice([-1, 0, 1]),
-                    "laser": tick % 7 == 0,
-                    "status": statuses[(tick // 4) % len(statuses)],
-                },
-            })
-    except asyncio.CancelledError:
-        raise
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await jetson_link.start()
-    fake_task = asyncio.create_task(fake_telemetry_loop())
     log.info("Ground station ready")
     try:
         yield
     finally:
-        fake_task.cancel()
-        try:
-            await fake_task
-        except asyncio.CancelledError:
-            pass
         await jetson_link.stop()
 
 
