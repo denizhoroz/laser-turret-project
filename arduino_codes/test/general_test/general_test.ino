@@ -144,11 +144,22 @@ Outcome sweepUntilLimit(int stepPin, int dirPin, bool dir, unsigned long pulseUs
   return o;
 }
 
-// Drive in `reverseDir` in chunks until `lim` releases continuously for
-// RELEASE_CLEAR_MS, then back off SAFETY_MARGIN_STEPS more. Capped by
-// MAX_SWEEP_STEPS to avoid infinite loops on stuck switches.
+// Drive in `reverseDir` in chunks until `releasing` clears for RELEASE_CLEAR_MS,
+// then `marginSteps` more. Watches:
+//   - axisOther: opposite end of same axis. Trip = overshoot (margin too high
+//     or DIR not reversing). Fault.
+//   - perp1/perp2: perpendicular axis. Trip = mechanical coupling fault.
+// Post-backoff sanity check: releasing limit must still read OPEN. If still
+// triggered → DIR pin not actually reversing (motor continued same direction,
+// switch chattered LOW briefly then re-pressed). Fault.
+// Capped by MAX_SWEEP_STEPS.
+//
+// Prints its own fault reason. Returns true only on fully clean release.
 bool reverseUntilRelease(int stepPin, int dirPin, bool reverseDir,
-                         unsigned long pulseUs, Sw* lim) {
+                         unsigned long pulseUs,
+                         Sw* releasing, Sw* axisOther,
+                         Sw* perp1, Sw* perp2,
+                         int marginSteps) {
   digitalWrite(dirPin, reverseDir ? HIGH : LOW);
   delay(DIR_SETUP_MS);
   long stepsTaken = 0;
@@ -156,25 +167,78 @@ bool reverseUntilRelease(int stepPin, int dirPin, bool reverseDir,
     for (int i = 0; i < RELEASE_CHUNK_STEPS; i++) singleStep(stepPin, pulseUs);
     stepsTaken += RELEASE_CHUNK_STEPS;
     updateAll();
-    if (triggered(*lim)) continue;
+
+    // Overshoot / coupling checks every step.
+    if (triggered(*axisOther)) {
+      Serial.print(F("  OVERSHOOT during backoff after ")); Serial.print(stepsTaken);
+      Serial.print(F(" steps: ")); Serial.print(axisOther->name);
+      Serial.println(F(" tripped — switch hysteresis large, DIR not reversing, or axis range short"));
+      return false;
+    }
+    if (triggered(*perp1) || triggered(*perp2)) {
+      Sw* p = triggered(*perp1) ? perp1 : perp2;
+      Serial.print(F("  PERP HIT during backoff after ")); Serial.print(stepsTaken);
+      Serial.print(F(" steps: ")); Serial.println(p->name);
+      return false;
+    }
+
+    if (triggered(*releasing)) continue;
 
     // Confirm release stays clear for RELEASE_CLEAR_MS.
     unsigned long start = millis();
     bool stayed = true;
     while (millis() - start < RELEASE_CLEAR_MS) {
       updateAll();
-      if (triggered(*lim)) { stayed = false; break; }
+      if (triggered(*releasing)) { stayed = false; break; }
     }
     if (!stayed) continue;
 
-    // Confirmed released — add safety margin.
-    for (int i = 0; i < SAFETY_MARGIN_STEPS; i++) singleStep(stepPin, pulseUs);
+    // Confirmed released — add safety margin with continuous watch.
+    for (int i = 0; i < marginSteps; i++) {
+      singleStep(stepPin, pulseUs);
+      updateAll();
+      if (triggered(*axisOther)) {
+        Serial.print(F("  OVERSHOOT in margin: ")); Serial.print(axisOther->name);
+        Serial.println(F(" tripped"));
+        return false;
+      }
+      if (triggered(*perp1) || triggered(*perp2)) {
+        Sw* p = triggered(*perp1) ? perp1 : perp2;
+        Serial.print(F("  PERP HIT in margin: ")); Serial.println(p->name);
+        return false;
+      }
+    }
+
+    // Sustained sanity check: releasing limit must stay OPEN for
+    // RELEASE_CLEAR_MS continuous (not just a one-shot read). Catches the
+    // case where a chattering switch passes the chunked release check while
+    // the motor never actually reversed (DIR pin not switching).
+    unsigned long sanityStart = millis();
+    while (millis() - sanityStart < RELEASE_CLEAR_MS) {
+      updateAll();
+      if (triggered(*releasing)) {
+        Serial.print(F("  RELEASE FAKE: ")); Serial.print(releasing->name);
+        Serial.println(F(" re-triggered in sanity window — DIR pin likely not switching (check wire)"));
+        return false;
+      }
+      if (triggered(*axisOther)) {
+        Serial.print(F("  OVERSHOOT in sanity window: ")); Serial.println(axisOther->name);
+        return false;
+      }
+      if (triggered(*perp1) || triggered(*perp2)) {
+        Sw* p = triggered(*perp1) ? perp1 : perp2;
+        Serial.print(F("  PERP HIT in sanity window: ")); Serial.println(p->name);
+        return false;
+      }
+    }
+
     Serial.print(F("  released after "));
     Serial.print(stepsTaken);
     Serial.print(F(" steps + margin "));
-    Serial.println(SAFETY_MARGIN_STEPS);
+    Serial.println(marginSteps);
     return true;
   }
+  Serial.println(F("  RELEASE TIMEOUT — switch stuck or motor not moving"));
   return false;
 }
 
@@ -182,6 +246,7 @@ bool reverseUntilRelease(int stepPin, int dirPin, bool reverseDir,
 // dir LOW -> other axis limit -> reverse + release + margin. Halts on
 // perpendicular trip, same-limit-both-dirs, timeout, or release failure.
 void motorTest(const char* name, int stepPin, int dirPin, unsigned long pulseUs,
+               int marginSteps,
                Sw* axis1, Sw* axis2, Sw* perp1, Sw* perp2) {
   if (halted) { Serial.println(F("HALTED — reset board")); return; }
   Serial.print(F("[MOTOR ")); Serial.print(name); Serial.println(F("] start"));
@@ -202,12 +267,23 @@ void motorTest(const char* name, int stepPin, int dirPin, unsigned long pulseUs,
   Serial.print(F("  HIT ")); Serial.print(o1.hit->name);
   Serial.print(F(" after ")); Serial.print(o1.steps); Serial.println(F(" steps"));
 
-  if (!reverseUntilRelease(stepPin, dirPin, LOW, pulseUs, o1.hit)) {
-    Serial.println(F("  RELEASE FAILED on dir A — switch stuck"));
+  Sw* otherOnAxis1 = (o1.hit == axis1) ? axis2 : axis1;
+  if (!reverseUntilRelease(stepPin, dirPin, LOW, pulseUs,
+                           o1.hit, otherOnAxis1, perp1, perp2, marginSteps)) {
+    Serial.println(F("  RELEASE FAILED on dir A"));
     allOff(); halted = true; return;
   }
 
   delay(INTER_PHASE_PAUSE_MS);
+
+  // Pre-sweep check: phase 1's limit must still be OPEN after the pause.
+  // If it re-engaged during the pause, motor drifted back or DIR was flaky.
+  updateAll();
+  if (triggered(*o1.hit)) {
+    Serial.print(F("  PRE-SWEEP FAULT: ")); Serial.print(o1.hit->name);
+    Serial.println(F(" re-triggered during inter-phase pause — DIR flaky or rotor drift"));
+    allOff(); halted = true; return;
+  }
 
   // Phase 2: sweep dir LOW
   Serial.println(F("  sweep LOW"));
@@ -229,7 +305,9 @@ void motorTest(const char* name, int stepPin, int dirPin, unsigned long pulseUs,
   Serial.print(F("  HIT ")); Serial.print(o2.hit->name);
   Serial.print(F(" after ")); Serial.print(o2.steps); Serial.println(F(" steps"));
 
-  if (!reverseUntilRelease(stepPin, dirPin, HIGH, pulseUs, o2.hit)) {
+  Sw* otherOnAxis2 = (o2.hit == axis1) ? axis2 : axis1;
+  if (!reverseUntilRelease(stepPin, dirPin, HIGH, pulseUs,
+                           o2.hit, otherOnAxis2, perp1, perp2, marginSteps)) {
     Serial.println(F("  RELEASE FAILED on dir B"));
     allOff(); halted = true; return;
   }
@@ -254,8 +332,8 @@ void runAll() {
   }
   ledTest();
   laserTest();
-  motorTest("PITCH", PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US, &swU, &swD, &swL, &swR);
-  motorTest("YAW",   PIN_YAW_STEP,   PIN_YAW_DIR,   YAW_PULSE_US,   &swL, &swR, &swU, &swD);
+  motorTest("PITCH", PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US, PITCH_SAFETY_MARGIN_STEPS, &swU, &swD, &swL, &swR);
+  motorTest("YAW",   PIN_YAW_STEP,   PIN_YAW_DIR,   YAW_PULSE_US,   YAW_SAFETY_MARGIN_STEPS,   &swL, &swR, &swU, &swD);
   Serial.println(F("[ALL] done"));
 }
 
@@ -299,8 +377,8 @@ void loop() {
     case 'L': ledTest(); break;
     case 'Z': laserTest(); break;
     case 'S': switchTest(); break;
-    case 'P': motorTest("PITCH", PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US, &swU, &swD, &swL, &swR); break;
-    case 'Y': motorTest("YAW",   PIN_YAW_STEP,   PIN_YAW_DIR,   YAW_PULSE_US,   &swL, &swR, &swU, &swD); break;
+    case 'P': motorTest("PITCH", PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US, PITCH_SAFETY_MARGIN_STEPS, &swU, &swD, &swL, &swR); break;
+    case 'Y': motorTest("YAW",   PIN_YAW_STEP,   PIN_YAW_DIR,   YAW_PULSE_US,   YAW_SAFETY_MARGIN_STEPS,   &swL, &swR, &swU, &swD); break;
     case 'A': runAll(); break;
     case 'X': emergencyStop(); break;
     default:

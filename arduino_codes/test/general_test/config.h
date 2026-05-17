@@ -60,6 +60,14 @@ constexpr unsigned long YAW_PULSE_US   = 2000;
 
 constexpr unsigned long DIR_SETUP_MS         = 50;     // DRV8825 DIR setup
 constexpr long          MAX_SWEEP_STEPS      = 20000;  // safety cap per sweep
-constexpr int           SAFETY_MARGIN_STEPS  = 100;    // extra back-off after release
-constexpr int           RELEASE_CHUNK_STEPS  = 25;     // batch before re-checking release
+
+// Back-off after limit release. Must stay SMALL relative to axis travel.
+// Axis travel in full-step mode: pitch ~56 steps (~100°), yaw 150 steps (270°).
+// Old shared value of 100 steps overshot pitch entirely. Per-axis now.
+constexpr int           PITCH_SAFETY_MARGIN_STEPS = 3;  // ~5.4° clearance
+constexpr int           YAW_SAFETY_MARGIN_STEPS   = 8;  // ~14.4° clearance
+
+constexpr int           RELEASE_CHUNK_STEPS  = 1;      // per-step check during backoff
+                                                       // (matches sweep behavior; prevents overshoot on
+                                                       // narrow-range axes like pitch ~56 steps)
 constexpr unsigned long INTER_PHASE_PAUSE_MS = 500;
