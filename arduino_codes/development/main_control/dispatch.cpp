@@ -1,0 +1,138 @@
+#include <Arduino.h>
+#include <ArduinoJson.h>
+#include <string.h>
+#include "dispatch.h"
+#include "config.h"
+#include "state.h"
+#include "tracking.h"
+#include "laser.h"
+#include "commands.h"
+#include "serial_link.h"
+
+static char rxBuf[SERIAL_LINE_BUF];
+static int  rxLen = 0;
+
+// =============================================================================
+// MANUAL SINGLE-CHAR MENU (bench testing only)
+// =============================================================================
+static void printHelp() {
+  Serial.println();
+  Serial.println(F("=== MAIN CONTROL ==="));
+  Serial.println(F("  H - help"));
+  Serial.println(F("  ? - status (as JSON)"));
+  Serial.println(F("  All control via line-delimited JSON. See main_control.ino header."));
+  Serial.println(F("===================="));
+}
+
+static void handleMenuChar(char c) {
+  switch (c) {
+    case 'H': printHelp(); break;
+    case '?': cmdStatusJson(); break;
+    default:
+      Serial.print(F("? unknown cmd: "));
+      Serial.println(c);
+      break;
+  }
+}
+
+// =============================================================================
+// PYTHON DATA HANDLERS  ({"type":"data","key":"...","value":...})
+// Silent — Python does not expect acks on this path.
+// =============================================================================
+static void handleOffsetData(JsonVariantConst value) {
+  lastTargetSignalMs = millis();
+  if (!value.is<JsonArrayConst>()) return;
+  JsonArrayConst arr = value.as<JsonArrayConst>();
+  if (arr.size() < 2) return;
+  int ox = arr[0] | 0;
+  int oy = arr[1] | 0;
+  applyOffset(ox, oy);
+}
+
+static void handleIsFiringData(bool on) {
+  lastTargetSignalMs = millis();
+  setFiring(on);
+}
+
+static void dispatchPythonData(JsonDocument &doc) {
+  const char* key = doc["key"] | (const char*)nullptr;
+  if (!key) return;
+  if      (!strcmp(key, "current_target_offset")) handleOffsetData(doc["value"]);
+  else if (!strcmp(key, "is_firing"))             handleIsFiringData(doc["value"] | false);
+  // unknown keys silently ignored
+}
+
+// =============================================================================
+// TOP-LEVEL DISPATCH
+// =============================================================================
+static void dispatchJson(JsonDocument &doc) {
+  const char* type = doc["type"] | (const char*)nullptr;
+  if (type) {
+    if (!strcmp(type, "data")) dispatchPythonData(doc);
+    return;   // state/mission/frame belong to the web link, not Arduino
+  }
+
+  const char* cmd = doc["cmd"] | (const char*)nullptr;
+  if (!cmd) {
+    JsonDocument r;
+    r["ok"]  = false;
+    r["err"] = "missing_type_or_cmd";
+    sendDoc(r);
+    return;
+  }
+
+  if (!strcmp(cmd, "status")) { cmdStatusJson(); return; }
+
+  JsonDocument resp;
+  resp["ack"] = cmd;
+
+  if      (!strcmp(cmd, "move"))   cmdMove(doc, resp);
+  else if (!strcmp(cmd, "stop"))   cmdStop(resp);
+  else if (!strcmp(cmd, "resume")) cmdResume(resp);
+  else if (!strcmp(cmd, "state"))  cmdState(doc, resp);
+  else if (!strcmp(cmd, "laser"))  cmdLaser(doc, resp);
+  else if (!strcmp(cmd, "ping"))   cmdPing(resp);
+  else                              { resp["ok"] = false; resp["err"] = "unknown_cmd"; }
+
+  sendDoc(resp);
+}
+
+static void processLine(char* line) {
+  while (*line == ' ' || *line == '\t') line++;
+  if (*line == '\0') return;
+
+  if (*line == '{') {
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, line);
+    if (err) {
+      JsonDocument r;
+      r["ok"]  = false;
+      r["err"] = "json_parse";
+      r["msg"] = err.c_str();
+      sendDoc(r);
+      return;
+    }
+    dispatchJson(doc);
+  } else {
+    char c = (*line >= 'a' && *line <= 'z') ? *line - 32 : *line;
+    handleMenuChar(c);
+  }
+}
+
+void feedSerialChar(char c) {
+  if (c == '\n' || c == '\r') {
+    if (rxLen > 0) {
+      rxBuf[rxLen] = '\0';
+      processLine(rxBuf);
+      rxLen = 0;
+    }
+  } else if (rxLen < SERIAL_LINE_BUF - 1) {
+    rxBuf[rxLen++] = c;
+  } else {
+    rxLen = 0;
+    JsonDocument r;
+    r["ok"]  = false;
+    r["err"] = "line_too_long";
+    sendDoc(r);
+  }
+}

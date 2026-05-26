@@ -68,11 +68,33 @@ Boilerplate of each header:
 
 ## 7. Reference sketch layout (use as template)
 
+Small sketches:
 ```
 arduino_codes/<group>/<sketch_name>/
 ├── <sketch_name>.ino   # logic only, no literals
 ├── config.h            # constants + pin assignments
 └── types.h             # structs + enums (only if any are returned/passed in fn signatures)
 ```
+
+For non-trivial sketches, split by **concern** into paired `.h`/`.cpp` modules.
+Reference implementation: `arduino_codes/development/main_control/`.
+
+```
+arduino_codes/<group>/<sketch_name>/
+├── <sketch_name>.ino           # thin entry — setup() + loop() + module includes
+├── config.h                     # constants
+├── types.h                      # shared structs / enums
+├── state.h / state.cpp          # globals (extern in .h, defined once in .cpp)
+├── <concern_a>.h / .cpp         # e.g. switches, leds, motor, laser, tracking, ...
+├── <concern_b>.h / .cpp
+└── ...
+```
+
+Rules:
+- The directory name must match the `.ino` filename.
+- `.cpp` files in the sketch dir auto-compile alongside the `.ino`.
+- Function prototypes in `.h` files defeat Arduino's auto-prototype bug (see Rule 1).
+- Cross-module shared globals live in `state.h` (`extern`) and `state.cpp` (definitions).
+- Keep dependencies a DAG — `<low>.h` can't include `<higher>.h`. If two modules need each other, extract a third.
 
 The directory name must match the `.ino` filename (Arduino build requirement).

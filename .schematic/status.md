@@ -54,9 +54,10 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
 | `arduino_codes/test/general_test/general_test.ino` | OK | bench-verified: pitch + yaw motion clean, all components except laser |
 | `arduino_codes/test/general_test/config.h` | OK | all pins + tunables centralized |
 | `arduino_codes/test/general_test/types.h` | OK | `Sw`, `SweepResult`, `Outcome` — moved out of `.ino` to defeat Arduino auto-prototype bug |
-| `arduino_codes/development/main_control/main_control.ino` | UNTESTED | step 2: LEDs + switches + motors + homing + JSON link to Jetson |
-| `arduino_codes/development/main_control/config.h` | NEW | pruned test-only constants; added `YAW_RANGE_STEPS`, `PITCH_RANGE_STEPS`, `SERIAL_LINE_BUF` |
-| `arduino_codes/development/main_control/types.h` | NEW | added `SystemState { IDLE, SCANNING, DETECTED }`; dropped sweep-test types |
+| `arduino_codes/development/main_control/` | refactored into modules | one thin `.ino` + 11 paired `.h/.cpp` files (state, switches, leds, motor, aim, laser, tracking, commands, serial_link, dispatch). Behavior unchanged. |
+| `arduino_codes/development/main_control/main_control.ino` | thin entry | setup + loop only; everything else is in headers |
+| `arduino_codes/development/main_control/config.h` | tunables | pins, timings, gains, parallax offset |
+| `arduino_codes/development/main_control/types.h` | shared types | `Sw`, `SystemState` |
 | **Dependency** — ArduinoJson v7 | required | install via Arduino IDE Library Manager → "ArduinoJson" by Benoît Blanchon |
 | Pitch pulse half-period | `2000 µs` | tune in config.h |
 | Yaw pulse half-period | `2000 µs` | tune in config.h |
@@ -178,6 +179,12 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
 
 ## Recent changes
 
+- **2026-05-17** main_control: refactored single-file `.ino` into per-concern modules. New file layout:
+  - `state` (globals) · `switches` (debounce) · `leds` (indicators) · `motor` (stepDelta primitive)
+  - `aim` (parallax) · `laser` (fire control) · `tracking` (px → step deltas)
+  - `serial_link` (outbound JSON) · `commands` (bench handlers) · `dispatch` (line parser + route)
+  - `main_control.ino` reduced to `setup()` + `loop()` + module includes.
+  - Dependencies form a clean DAG; no circular includes. Behavior unchanged from pre-refactor.
 - **2026-05-17** main_control: added `aim()` — parallax compensation. On firing edge (false→true) pitch shifts UP by `PITCH_AIM_OFFSET_STEPS` before laser turns on; on firing-off edge motor shifts back DOWN. Both Python (`is_firing`) and bench (`{cmd:"laser"}`) paths apply it. Tune in config.h. Set to 0 to disable.
 - **2026-05-17** main_control: **stripped position tracker, homing, software range clamp**. Pure delta motion now — limit switches are the only constraint. Reason: mechanical stress was advancing the tracker out of sync with real motor position, causing the absolute model to refuse moves into space that was actually available. New primitive `stepDelta()` replaces `moveAxis()`. `home()`, `sweepToLimit()`, `backoffFromLimit()`, `yawPos`/`pitchPos`/`homed` globals, `YAW_RANGE_STEPS`/`PITCH_RANGE_STEPS`, `{"cmd":"home"}` all removed.
 - **2026-05-17** Laser hardware repaired (burned resistor replaced). Bench-fires from general_test. main_control still skips driving PIN_LASER (legacy guard while hw was dead) — logged as new Open #1, fix in progress.
