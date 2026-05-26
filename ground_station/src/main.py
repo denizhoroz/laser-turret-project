@@ -4,7 +4,7 @@ Hosts the frontend, exposes mission start/stop endpoints, and bridges to the
 Jetson over a JSON-line link (TCP for dev, swap to pyserial for prod USB).
 
 Run from ground_station/ :
-    uvicorn src.backend.main:app --reload --port 8000
+    uvicorn src.main:app --reload --port 8000
 """
 
 from __future__ import annotations
@@ -13,9 +13,17 @@ import asyncio
 import json
 import logging
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Set
+
+# Make sibling `backend/` package importable regardless of how this file is
+# launched (uvicorn src.main:app from ground_station/, python src/main.py,
+# or `cd src && uvicorn main:app`). Adds src/ to sys.path if not already on it.
+_SRC_DIR = Path(__file__).resolve().parent
+if str(_SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(_SRC_DIR))
 
 from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -23,12 +31,12 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
-from link import JetsonLink
+from backend.link import JetsonLink
 
 log = logging.getLogger("ground_station")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-FRONTEND_DIR = Path(__file__).resolve().parents[1] / "frontend"
+FRONTEND_DIR = Path(__file__).resolve().parent / "frontend"
 TEMPLATES_DIR = FRONTEND_DIR / "templates"
 STATIC_DIR = FRONTEND_DIR / "static"
 
