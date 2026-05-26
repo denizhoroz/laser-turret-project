@@ -51,9 +51,13 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
 
 | Item | State | Notes |
 | --- | --- | --- |
-| `arduino_codes/test/general_test/general_test.ino` | COMPILES (untested on board) | fix in Resolved 2026-05-17 |
-| `arduino_codes/test/general_test/config.h` | NEW | all pins + tunables centralized |
-| `arduino_codes/test/general_test/types.h` | NEW | `Sw`, `SweepResult`, `Outcome` — moved out of `.ino` to defeat Arduino auto-prototype bug |
+| `arduino_codes/test/general_test/general_test.ino` | OK | bench-verified: pitch + yaw motion clean, all components except laser |
+| `arduino_codes/test/general_test/config.h` | OK | all pins + tunables centralized |
+| `arduino_codes/test/general_test/types.h` | OK | `Sw`, `SweepResult`, `Outcome` — moved out of `.ino` to defeat Arduino auto-prototype bug |
+| `arduino_codes/development/main_control/main_control.ino` | UNTESTED | step 2: LEDs + switches + motors + homing + JSON link to Jetson |
+| `arduino_codes/development/main_control/config.h` | NEW | pruned test-only constants; added `YAW_RANGE_STEPS`, `PITCH_RANGE_STEPS`, `SERIAL_LINE_BUF` |
+| `arduino_codes/development/main_control/types.h` | NEW | added `SystemState { IDLE, SCANNING, DETECTED }`; dropped sweep-test types |
+| **Dependency** — ArduinoJson v7 | required | install via Arduino IDE Library Manager → "ArduinoJson" by Benoît Blanchon |
 | Pitch pulse half-period | `2000 µs` | tune in config.h |
 | Yaw pulse half-period | `2000 µs` | tune in config.h |
 | Microstepping mode | **FULL STEP** | MS1/MS2/MS3 all LOW (no jumpers) on both drivers — 1.8°/step |
@@ -162,6 +166,8 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
 
 ## Recent changes
 
+- **2026-05-17** main_control: added limit switches, motor primitives, homing on boot, position tracker, ArduinoJson v7 link to Jetson (line-delimited JSON over USB Serial). Schema documented in sketch header.
+- **2026-05-17** main_control: scaffolded with LED layer (green = on, yellow = DETECTED, red = laser firing flag).
 - **2026-05-17** Sanity check confirmed yaw DIR is genuinely dead — `RELEASE FAKE` fires correctly. Open #2 updated with 3 fix paths (replace jumper / move pin / test driver). No further software fix possible.
 - **2026-05-17** Hardened release sanity → sustained-LOW window. Added PRE-SWEEP check after inter-phase pause. Logged Open #2 (yaw DIR pin 9 intermittent — physical fix pending).
 - **2026-05-17** Pitch test confirmed clean on bench after per-step backoff fix.

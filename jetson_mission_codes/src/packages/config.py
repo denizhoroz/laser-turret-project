@@ -10,5 +10,5 @@ TARGET_LOSS_TIMEOUT: float = 2
 TARGET_FIRING_DURATION: float = 3
 ROI_DWELL_DURATION: float = 1.0   # target must stay in ROI this long before fire
 TCAREA_RATIO: float = 0.4         # TCArea side as fraction of bbox side
-ARDUINO_PORT: str = "COM9" 
+ARDUINO_PORT: str = "COM8" 
 ARDUINO_BAUDRATE: int = 115200
