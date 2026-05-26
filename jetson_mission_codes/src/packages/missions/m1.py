@@ -7,6 +7,7 @@ from packages.config import (
     TARGET_LOSS_TIMEOUT,
     TARGET_FIRING_DURATION,
     ROI_DWELL_DURATION,
+    MISSION1_WEIGHTS,
 )
 
 from packages.detector import Detector
@@ -31,7 +32,7 @@ class Mission1:
         """Starts the mission loop."""
 
         # Initialize detector and tracker
-        detector = Detector()
+        detector = Detector(weights=str(MISSION1_WEIGHTS))
         tracker = Tracker(window_size=WINDOW_SIZE)
         detector.open_camera()
 

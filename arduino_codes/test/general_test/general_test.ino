@@ -62,7 +62,7 @@ void printHelp() {
   Serial.println(F("=== GENERAL TEST MENU ==="));
   Serial.println(F("  H - help"));
   Serial.println(F("  L - LED cycle (Red,Yellow,Green)"));
-  Serial.println(F("  Z - Laser blink x3"));
+  Serial.println(F("  Z - Laser ON (Q to quit)"));
   Serial.println(F("  S - Switch dump (Q to quit)"));
   Serial.println(F("  P - Pitch motor sweep (limit -> release -> opposite -> release)"));
   Serial.println(F("  Y - Yaw motor sweep (same)"));
@@ -87,13 +87,21 @@ void ledTest() {
   Serial.println(F("[LED] done"));
 }
 
+// Laser steady ON until user sends Q (matches switch test pattern).
+// No flicker, no timer — just hold HIGH until quit.
 void laserTest() {
-  Serial.println(F("[LASER] start"));
-  for (int i = 0; i < LASER_BLINKS; i++) {
-    digitalWrite(PIN_LASER, HIGH); delay(LASER_MS);
-    digitalWrite(PIN_LASER, LOW);  delay(LASER_MS);
+  Serial.println(F("[LASER] ON — send Q to quit"));
+  digitalWrite(PIN_LASER, HIGH);
+  for (;;) {
+    if (Serial.available()) {
+      char c = Serial.read();
+      if (c == 'Q' || c == 'q') {
+        digitalWrite(PIN_LASER, LOW);
+        Serial.println(F("[LASER] OFF"));
+        return;
+      }
+    }
   }
-  Serial.println(F("[LASER] done"));
 }
 
 // Switch dump runs until user sends 'Q' (or 'q'). Stray newlines/whitespace

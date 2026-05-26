@@ -1,30 +1,35 @@
 // main_control.ino — turret production firmware.
-// Layers built so far: LEDs · limit switches · motors · homing · JSON link to Jetson.
+// Layers: LEDs · limit switches · stepper motors (delta-only) · JSON link to Jetson.
 //
-// LED rules (from spec):
+// **Motion model: pure step deltas, reactive limit safety.**
+//   No position tracker, no homing, no software range clamp. The only
+//   constraint on motion is the physical limit switch — if it trips during a
+//   move, the motor halts that axis and emits a `limit` event. Reason for
+//   stripping: mechanical stress / load can falsely advance the tracker out
+//   of sync with real position, causing the absolute model to refuse moves
+//   into space that's actually available.
+//
+// LED rules:
 //   Green   — ON whenever system is powered.
-//   Yellow  — ON in DETECTED state. OFF in IDLE / SCANNING.
-//   Red     — ON while laser is firing. OFF otherwise.
+//   Yellow  — ON in DETECTED state OR fresh target signal OR laser firing.
+//   Red     — ON while laser is firing.
 //
 // JSON link (line-delimited JSON over USB Serial, both directions):
-//   Jetson -> Arduino:
+//   Jetson -> Arduino (Python production schema):
+//     {"type":"data","key":"current_target_offset","value":[x,y]}   // pixel offset
+//     {"type":"data","key":"is_firing","value":true|false}          // laser fire flag
+//   Bench / manual schema (acks back):
 //     {"cmd":"move","yaw":N,"pitch":M}      // signed step deltas
-//     {"cmd":"home"}                        // re-run homing routine
-//     {"cmd":"stop"}                        // raise halt flag (refuses moves until cleared)
-//     {"cmd":"resume"}                      // clear halt flag (after operator review)
+//     {"cmd":"stop"} / {"cmd":"resume"}     // halt / clear halt
 //     {"cmd":"state","value":"idle|scanning|detected"}
-//     {"cmd":"laser","on":true|false}       // sets flag + red LED (PIN_LASER not driven yet)
-//     {"cmd":"status"}                      // request snapshot
-//     {"cmd":"ping"}                        // health check
-//   Arduino -> Jetson:
-//     {"ack":"<cmd>", "ok":bool, ...payload}
+//     {"cmd":"laser","on":true|false}
+//     {"cmd":"status"} / {"cmd":"ping"}
+//   Arduino -> Jetson telemetry:
+//     {"ack":"<cmd>", ...}                  // only for {"cmd":...} messages
 //     {"event":"limit","axis":"yaw|pitch","side":"left|right|up|down"}
-//     {"event":"homed","yawPos":0,"pitchPos":0}
 //     {"event":"halted","reason":"..."}
-//     {"telemetry":"pos","yawPos":N,"pitchPos":M}
 //
-// Manual single-char cmds (for bench testing without Jetson):
-//   H - help · ? - status
+// Manual single-char bench cmds:  H - help · ? - status
 //
 // Pin map: .schematic/components.md   ·   Project state: .schematic/status.md
 
@@ -37,11 +42,11 @@
 // =============================================================================
 SystemState currentState = STATE_IDLE;
 bool laserFiring = false;
-bool homed = false;
 bool halted = false;
 
-long yawPos   = 0;  // valid only after homed == true
-long pitchPos = 0;
+// Last time a Python "target signal" arrived (offset or is_firing). Drives
+// yellow LED via staleness window (TARGET_SIGNAL_STALE_MS).
+unsigned long lastTargetSignalMs = 0;
 
 Sw swL = { PIN_LIM_LEFT,  false, false, 0, "left"  };
 Sw swR = { PIN_LIM_RIGHT, false, false, 0, "right" };
@@ -74,8 +79,11 @@ void seedSwitches() {
 // LED LAYER
 // =============================================================================
 void updateLeds() {
-  digitalWrite(PIN_LED_GREEN,  HIGH);
-  digitalWrite(PIN_LED_YELLOW, currentState == STATE_DETECTED ? HIGH : LOW);
+  digitalWrite(PIN_LED_GREEN, HIGH);
+  bool targetFresh = (lastTargetSignalMs > 0) &&
+                     (millis() - lastTargetSignalMs < TARGET_SIGNAL_STALE_MS);
+  bool yellow = (currentState == STATE_DETECTED) || targetFresh || laserFiring;
+  digitalWrite(PIN_LED_YELLOW, yellow ? HIGH : LOW);
   digitalWrite(PIN_LED_RED,    laserFiring ? HIGH : LOW);
 }
 
@@ -89,7 +97,7 @@ const char* stateName(SystemState s) {
 }
 
 // =============================================================================
-// OUTBOUND JSON — events, acks, telemetry
+// OUTBOUND JSON — events, acks
 // =============================================================================
 void sendDoc(JsonDocument &doc) {
   serializeJson(doc, Serial);
@@ -104,14 +112,6 @@ void sendEventLimit(const char* axis, const char* side) {
   sendDoc(d);
 }
 
-void sendEventHomed() {
-  JsonDocument d;
-  d["event"]    = "homed";
-  d["yawPos"]   = yawPos;
-  d["pitchPos"] = pitchPos;
-  sendDoc(d);
-}
-
 void sendEventHalted(const char* reason) {
   JsonDocument d;
   d["event"]  = "halted";
@@ -121,20 +121,21 @@ void sendEventHalted(const char* reason) {
 
 void sendStatus(const char* tagKey, const char* tagVal) {
   JsonDocument d;
-  d[tagKey]      = tagVal;
-  d["state"]     = stateName(currentState);
-  d["laser"]     = laserFiring;
-  d["homed"]     = homed;
-  d["halted"]    = halted;
-  d["yawPos"]    = yawPos;
-  d["pitchPos"]  = pitchPos;
-  d["yawRange"]  = YAW_RANGE_STEPS;
-  d["pitchRange"] = PITCH_RANGE_STEPS;
+  d[tagKey]   = tagVal;
+  d["state"]  = stateName(currentState);
+  d["laser"]  = laserFiring;
+  d["halted"] = halted;
   sendDoc(d);
 }
 
 // =============================================================================
-// MOTOR PRIMITIVES
+// MOTOR — pure delta steps with one-sided limit-switch halt.
+//
+// Direction convention (matches motor coil + DIR wiring):
+//   yaw   delta > 0 → DIR HIGH → motor toward RIGHT.   Watch swR.
+//   yaw   delta < 0 → DIR LOW  → motor toward LEFT.    Watch swL.
+//   pitch delta > 0 → DIR HIGH → motor toward UP.      Watch swU.
+//   pitch delta < 0 → DIR LOW  → motor toward DOWN.    Watch swD.
 // =============================================================================
 void stepOnce(int stepPin, unsigned long pulseUs) {
   digitalWrite(stepPin, HIGH);
@@ -143,162 +144,51 @@ void stepOnce(int stepPin, unsigned long pulseUs) {
   delayMicroseconds(pulseUs);
 }
 
-// Step `count` times in given direction. Watches `limGuard` only (one-sided
-// safety net during normal moves). Returns steps actually executed.
-long stepN(int stepPin, int dirPin, bool dirHigh, unsigned long pulseUs,
-           long count, Sw* limGuard) {
+// Forward decl — defined below stepDelta.
+void aim(bool firingOn);
+
+// Execute up to |delta| steps in given direction. Stops early if limit trips.
+// Returns signed steps actually executed.
+long stepDelta(int stepPin, int dirPin, unsigned long pulseUs,
+               long delta, Sw* limLow, Sw* limHigh, const char* axisName) {
+  if (delta == 0) return 0;
+  bool dirHigh = delta > 0;
+  long want    = dirHigh ? delta : -delta;
+  Sw* watch    = dirHigh ? limHigh : limLow;
+
   digitalWrite(dirPin, dirHigh ? HIGH : LOW);
   delay(DIR_SETUP_MS);
+
   long done = 0;
-  for (long i = 0; i < count; i++) {
+  for (long i = 0; i < want; i++) {
     updateAll();
-    if (limGuard && triggered(*limGuard)) break;
+    if (triggered(*watch)) {
+      sendEventLimit(axisName, watch->name);
+      break;
+    }
     stepOnce(stepPin, pulseUs);
     done++;
-  }
-  return done;
-}
-
-// Sweep until `lim` triggers or cap reached. Returns true on hit.
-bool sweepToLimit(int stepPin, int dirPin, bool dirHigh, unsigned long pulseUs,
-                  Sw* lim, long* stepsOut) {
-  digitalWrite(dirPin, dirHigh ? HIGH : LOW);
-  delay(DIR_SETUP_MS);
-  for (long i = 0; i < MAX_SWEEP_STEPS; i++) {
-    updateAll();
-    if (triggered(*lim)) { if (stepsOut) *stepsOut = i; return true; }
-    stepOnce(stepPin, pulseUs);
-  }
-  if (stepsOut) *stepsOut = MAX_SWEEP_STEPS;
-  return false;
-}
-
-// Reverse direction; per-step backoff until `lim` releases continuously for
-// RELEASE_CLEAR_MS, then add `margin` more steps clear of the lever.
-bool backoffFromLimit(int stepPin, int dirPin, bool reverseDirHigh,
-                      unsigned long pulseUs, Sw* lim, int margin) {
-  digitalWrite(dirPin, reverseDirHigh ? HIGH : LOW);
-  delay(DIR_SETUP_MS);
-  long stepsTaken = 0;
-  while (stepsTaken < MAX_SWEEP_STEPS) {
-    stepOnce(stepPin, pulseUs);
-    stepsTaken++;
-    updateAll();
-    if (triggered(*lim)) continue;
-    // Confirm release stays clear.
-    unsigned long start = millis();
-    bool stayed = true;
-    while (millis() - start < RELEASE_CLEAR_MS) {
-      updateAll();
-      if (triggered(*lim)) { stayed = false; break; }
-    }
-    if (!stayed) continue;
-    // Margin steps with per-step limit watch.
-    for (int i = 0; i < margin; i++) {
-      stepOnce(stepPin, pulseUs);
-      updateAll();
-      // No need to halt here — margin is small, axis is wide open.
-    }
-    // Final sanity (sustained LOW).
-    unsigned long sanityStart = millis();
-    while (millis() - sanityStart < RELEASE_CLEAR_MS) {
-      updateAll();
-      if (triggered(*lim)) return false;
-    }
-    return true;
-  }
-  return false;
-}
-
-// =============================================================================
-// HOMING
-// Yaw   : sweep LOW (toward LEFT) → swL trips → set yawPos = 0 → backoff +margin.
-// Pitch : sweep LOW (toward DOWN) → swD trips → set pitchPos = 0 → backoff +margin.
-// After both succeed, position is (YAW_SAFETY_MARGIN_STEPS, PITCH_SAFETY_MARGIN_STEPS).
-// Positive deltas thereafter move toward RIGHT (yaw) and UP (pitch).
-// =============================================================================
-bool home() {
-  homed = false;
-  Serial.println(F("# homing yaw -> LEFT"));
-  long s = 0;
-  if (!sweepToLimit(PIN_YAW_STEP, PIN_YAW_DIR, LOW, YAW_PULSE_US, &swL, &s)) {
-    sendEventHalted("home_yaw_timeout");
-    halted = true;
-    return false;
-  }
-  Serial.print(F("# yaw LEFT hit in ")); Serial.println(s);
-  if (!backoffFromLimit(PIN_YAW_STEP, PIN_YAW_DIR, HIGH, YAW_PULSE_US,
-                        &swL, YAW_SAFETY_MARGIN_STEPS)) {
-    sendEventHalted("home_yaw_release");
-    halted = true;
-    return false;
-  }
-  yawPos = YAW_SAFETY_MARGIN_STEPS;
-
-  Serial.println(F("# homing pitch -> DOWN"));
-  if (!sweepToLimit(PIN_PITCH_STEP, PIN_PITCH_DIR, LOW, PITCH_PULSE_US, &swD, &s)) {
-    sendEventHalted("home_pitch_timeout");
-    halted = true;
-    return false;
-  }
-  Serial.print(F("# pitch DOWN hit in ")); Serial.println(s);
-  if (!backoffFromLimit(PIN_PITCH_STEP, PIN_PITCH_DIR, HIGH, PITCH_PULSE_US,
-                        &swD, PITCH_SAFETY_MARGIN_STEPS)) {
-    sendEventHalted("home_pitch_release");
-    halted = true;
-    return false;
-  }
-  pitchPos = PITCH_SAFETY_MARGIN_STEPS;
-
-  homed = true;
-  halted = false;
-  sendEventHomed();
-  return true;
-}
-
-// =============================================================================
-// MOVE — signed delta with software clamp + live limit halt.
-// Returns the actual signed delta executed (may be smaller than requested if
-// clamped to range or stopped early by limit trigger).
-// =============================================================================
-long moveAxis(int stepPin, int dirPin, unsigned long pulseUs,
-              long delta, long* pos, long rangeMax,
-              Sw* limLow, Sw* limHigh,
-              const char* axisName) {
-  if (delta == 0) return 0;
-
-  long target = *pos + delta;
-  if (target < 0)         target = 0;
-  if (target > rangeMax)  target = rangeMax;
-  long clamped = target - *pos;
-  if (clamped == 0) return 0;
-
-  bool dirHigh  = clamped > 0;     // positive = toward RIGHT (yaw) / UP (pitch)
-  long want     = clamped > 0 ? clamped : -clamped;
-  Sw* watch     = dirHigh ? limHigh : limLow;
-
-  long done = stepN(stepPin, dirPin, dirHigh, pulseUs, want, watch);
-  *pos += dirHigh ? done : -done;
-
-  if (done < want) {
-    // Limit interrupted us — emit telemetry.
-    sendEventLimit(axisName, watch->name);
   }
   return dirHigh ? done : -done;
 }
 
 // =============================================================================
-// COMMAND HANDLERS
+// AIMING — parallax compensation
+//
+// One-shot pitch shift applied on firing edges. UP before firing, DOWN after.
+// Magnitude in config.h (PITCH_AIM_OFFSET_STEPS). Idempotent guards prevent
+// double-application if firing state is hammered.
 // =============================================================================
-void cmdHome(JsonDocument &resp) {
-  bool ok = home();
-  resp["ok"] = ok;
-  if (ok) {
-    resp["yawPos"]   = yawPos;
-    resp["pitchPos"] = pitchPos;
-  }
+void aim(bool firingOn) {
+  if (halted || PITCH_AIM_OFFSET_STEPS == 0) return;
+  long delta = firingOn ? PITCH_AIM_OFFSET_STEPS : -PITCH_AIM_OFFSET_STEPS;
+  stepDelta(PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US,
+            delta, &swD, &swU, "pitch");
 }
 
+// =============================================================================
+// COMMAND HANDLERS (bench schema)
+// =============================================================================
 void cmdStop(JsonDocument &resp) {
   halted = true;
   sendEventHalted("stop_cmd");
@@ -312,25 +202,20 @@ void cmdResume(JsonDocument &resp) {
 }
 
 void cmdMove(JsonDocument &doc, JsonDocument &resp) {
-  if (!homed)  { resp["ok"] = false; resp["err"] = "not_homed";  return; }
-  if (halted)  { resp["ok"] = false; resp["err"] = "halted";     return; }
+  if (halted) { resp["ok"] = false; resp["err"] = "halted"; return; }
 
   long yawDelta   = doc["yaw"]   | 0;
   long pitchDelta = doc["pitch"] | 0;
 
-  long yawDone   = moveAxis(PIN_YAW_STEP,   PIN_YAW_DIR,   YAW_PULSE_US,
-                            yawDelta,   &yawPos,   YAW_RANGE_STEPS,
-                            &swL, &swR, "yaw");
-  long pitchDone = moveAxis(PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US,
-                            pitchDelta, &pitchPos, PITCH_RANGE_STEPS,
-                            &swD, &swU, "pitch");
+  long yawDone   = stepDelta(PIN_YAW_STEP,   PIN_YAW_DIR,   YAW_PULSE_US,
+                             yawDelta,   &swL, &swR, "yaw");
+  long pitchDone = stepDelta(PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US,
+                             pitchDelta, &swD, &swU, "pitch");
 
   resp["ok"]        = true;
   resp["yawDone"]   = yawDone;
   resp["pitchDone"] = pitchDone;
-  resp["yawPos"]    = yawPos;
-  resp["pitchPos"]  = pitchPos;
-  resp["clipped"]   = (yawDone != yawDelta) || (pitchDone != pitchDelta);
+  resp["limited"]   = (yawDone != yawDelta) || (pitchDone != pitchDelta);
 }
 
 void cmdState(JsonDocument &doc, JsonDocument &resp) {
@@ -349,9 +234,18 @@ void cmdState(JsonDocument &doc, JsonDocument &resp) {
 
 void cmdLaser(JsonDocument &doc, JsonDocument &resp) {
   bool on = doc["on"] | false;
-  laserFiring = on;
-  // PIN_LASER not driven yet — laser hardware dead (status.md Open #1).
-  updateLeds();
+  if (on != laserFiring) {
+    if (on) {
+      aim(true);                                // shift pitch up first
+      laserFiring = true;
+      digitalWrite(PIN_LASER, HIGH);
+    } else {
+      digitalWrite(PIN_LASER, LOW);
+      laserFiring = false;
+      aim(false);                               // shift back down
+    }
+    updateLeds();
+  }
   resp["ok"]    = true;
   resp["laser"] = laserFiring;
 }
@@ -365,24 +259,94 @@ void cmdStatusJson() {
   sendStatus("ack", "status");
 }
 
+// =============================================================================
+// PYTHON DATA-MESSAGE HANDLERS  ({"type":"data","key":"...","value":...})
+// Silent — Python does not expect acks on this path.
+// =============================================================================
+// Convert one axis offset (pixels) to a signed step delta.
+//   |px| < DEAD_ZONE_PX           → 0
+//   else                          → max(1, |px| / pxPerStep), capped, signed by px.
+// Caller flips sign for pitch (image y+ = down, but pitch UP = positive).
+static long offsetToSteps(int px, int pxPerStep) {
+  int mag = px < 0 ? -px : px;
+  if (mag < DEAD_ZONE_PX) return 0;
+  long n = mag / pxPerStep;
+  if (n < 1) n = 1;                                  // force motion past deadzone
+  if (n > MAX_STEP_PER_TICK) n = MAX_STEP_PER_TICK;  // safety cap
+  return px > 0 ? n : -n;
+}
+
+void handleOffsetData(JsonVariantConst value) {
+  lastTargetSignalMs = millis();
+  if (halted) return;
+  if (!value.is<JsonArrayConst>()) return;
+  JsonArrayConst arr = value.as<JsonArrayConst>();
+  if (arr.size() < 2) return;
+
+  int ox = arr[0] | 0;
+  int oy = arr[1] | 0;
+
+  long yawDelta   =  offsetToSteps(ox, PX_PER_STEP_YAW);   // x+ → yaw +
+  long pitchDelta = -offsetToSteps(oy, PX_PER_STEP_PITCH); // y+ (below) → pitch -
+
+  if (yawDelta != 0) {
+    stepDelta(PIN_YAW_STEP, PIN_YAW_DIR, YAW_PULSE_US,
+              yawDelta, &swL, &swR, "yaw");
+  }
+  if (pitchDelta != 0) {
+    stepDelta(PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US,
+              pitchDelta, &swD, &swU, "pitch");
+  }
+
+  updateLeds();
+}
+
+void handleIsFiringData(bool on) {
+  lastTargetSignalMs = millis();
+  if (on == laserFiring) return;
+
+  if (on) {
+    aim(true);                                  // shift pitch up to compensate parallax
+    laserFiring = true;
+    digitalWrite(PIN_LASER, HIGH);
+  } else {
+    digitalWrite(PIN_LASER, LOW);
+    laserFiring = false;
+    aim(false);                                 // shift back so vision tracking resumes aligned
+  }
+  updateLeds();
+}
+
+void dispatchPythonData(JsonDocument &doc) {
+  const char* key = doc["key"] | (const char*)nullptr;
+  if (!key) return;
+  if      (!strcmp(key, "current_target_offset")) handleOffsetData(doc["value"]);
+  else if (!strcmp(key, "is_firing"))             handleIsFiringData(doc["value"] | false);
+  // unknown keys silently ignored
+}
+
 void dispatchJson(JsonDocument &doc) {
+  const char* type = doc["type"] | (const char*)nullptr;
+  if (type) {
+    if (!strcmp(type, "data")) dispatchPythonData(doc);
+    return;
+  }
+
   const char* cmd = doc["cmd"] | (const char*)nullptr;
   if (!cmd) {
     JsonDocument r;
     r["ok"]  = false;
-    r["err"] = "missing_cmd";
+    r["err"] = "missing_type_or_cmd";
     sendDoc(r);
     return;
   }
 
-  // status is one-shot, no resp wrapper
   if (!strcmp(cmd, "status")) { cmdStatusJson(); return; }
 
   JsonDocument resp;
   resp["ack"] = cmd;
 
   if      (!strcmp(cmd, "move"))   cmdMove(doc, resp);
-  else if (!strcmp(cmd, "home"))   cmdHome(resp);
   else if (!strcmp(cmd, "stop"))   cmdStop(resp);
   else if (!strcmp(cmd, "resume")) cmdResume(resp);
   else if (!strcmp(cmd, "state"))  cmdState(doc, resp);
@@ -470,13 +434,8 @@ void setup() {
   seedSwitches();
 
   Serial.println();
-  Serial.println(F("# main_control ready."));
+  Serial.println(F("# main_control ready (delta-only mode, no homing)."));
   printHelp();
-
-  // Auto-home on boot.
-  if (!home()) {
-    Serial.println(F("# homing failed at boot — system halted, send {\"cmd\":\"home\"} to retry"));
-  }
 }
 
 void loop() {
@@ -491,12 +450,20 @@ void loop() {
     } else if (rxLen < SERIAL_LINE_BUF - 1) {
       rxBuf[rxLen++] = c;
     } else {
-      // overflow — drop line
       rxLen = 0;
       JsonDocument r;
       r["ok"]  = false;
       r["err"] = "line_too_long";
       sendDoc(r);
     }
+  }
+
+  // Refresh LEDs periodically so yellow drops when the target signal goes
+  // stale (no recent offset/fire message from Python).
+  static unsigned long lastLedTick = 0;
+  unsigned long now = millis();
+  if (now - lastLedTick > 100) {
+    lastLedTick = now;
+    updateLeds();
   }
 }

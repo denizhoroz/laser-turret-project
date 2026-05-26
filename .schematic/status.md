@@ -26,7 +26,7 @@ Source of truth for what works on the bench. Update after every test run.
 | Limit switch RIGHT (A13) | OK | 2026-05-17 | |
 | Limit switch UP (A14) | OK | 2026-05-17 | |
 | Limit switch DOWN (A15) | OK | 2026-05-17 | |
-| Laser 5V 650nm | **BROKEN** | 2026-05-17 | dead — see Open #1 (burned resistor suspected) |
+| Laser 5V 650nm | OK | 2026-05-17 | repaired; bench-fires from general_test |
 | IMX179 camera | NOT INTEGRATED | — | |
 | Ground Control System | NOT INTEGRATED | — | |
 
@@ -66,7 +66,7 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
 
 ## Open issues
 
-### #2 — Yaw DIR signal dead (MEGA pin 9 or driver DIR input)
+### #1 — Yaw DIR signal dead (MEGA pin 9 or driver DIR input)
 - **Confirmed** 2026-05-17 by hardened sanity check: `RELEASE FAKE: RIGHT re-triggered in sanity window — DIR pin likely not switching`. Motor physically can't reverse.
 - Third recurrence of pin-9 fault this session. Diagnosis chain:
   1. First incident: wire popped out → re-seated → worked.
@@ -78,19 +78,17 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
   - **C.** Test driver DIR input directly: feed DIR pin a manual 5V/GND, send STEP pulses with `Y`, watch direction. Confirms driver health.
 - **Verify fix:** `Y` should print `HIT RIGHT` → `released after N + margin 8` → no `RELEASE FAKE` → `HIT LEFT` → done.
 
-### #1 — Laser not firing
-- Symptom: `Z` cmd runs, no beam emitted.
-- Diagnosed scope: fault is inside the **laser module circuit itself**, not MEGA pin 2, not the sketch, not wiring path.
-- Suspect: current-limit resistor(s) in the laser module **burned out** (over-current or sustained-on damage).
-- **Verify suspicion:** measure resistance across the suspect resistor(s); compare to expected value or to an untouched module. Visible discoloration / burn smell on the PCB also a tell.
-- **Fix path:** replace burned resistor (if identifiable) OR replace the whole 5V 650 nm laser module. Add an external series resistor or proper driver before re-powering, to prevent repeat.
-- Workflow until fixed: skip `Z` in test runs; `A` (run-all) will still attempt it harmlessly.
-
 ---
 
 ## Resolved issues
 
 *(Fixed problems move here from "Open" with a date. Acts as project memory.)*
+
+### Hardware (2026-05-17) — Laser dead (burned resistor)
+- Symptom: `Z` cmd reached PIN_LASER but no beam.
+- Cause: burned current-limit resistor inside laser module (over-current event prior).
+- Fix: resistor replaced. Laser bench-fires from `arduino_codes/test/general_test`.
+- **Lesson:** add an external series resistor (or driver) on PIN_LASER before powering replacements, to prevent repeat.
 
 ### Hardware (2026-05-17) — Motors stalling at limit switches (buzz, no rotation)
 - Symptom: both motors hit limit switch then buzzed in place — STEP pulses firing but rotor not rotating. Pitch worse than yaw. Triggered false `SAME LIMIT BOTH DIRS` because lever chatter slipped past new RELEASE FAKE check.
@@ -156,6 +154,20 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
 
 ---
 
+## Backlog (TODO)
+
+- **Improve tracking quality** in `arduino_codes/development/main_control/`. Current model = divisor + deadzone + min-1-step (proven simple). Possible improvements:
+  - Tune `PX_PER_STEP_YAW` / `PX_PER_STEP_PITCH` / `DEAD_ZONE_PX` from bench observation.
+  - Add proportional + integral term for steady-state error (target stable but offset never quite zero).
+  - Predictive lead based on offset velocity (frame-to-frame delta) to compensate for motor lag.
+  - Adaptive gain — coarse step when far, fine step when close (avoids overshoot).
+  - Consider matching Python frame rate to motor settling time (currently 30 fps × small step ≈ continuous chasing).
+- **Add scanning functions to control code** (Arduino main_control). Currently the sketch only reacts to incoming offsets. No autonomous scan motion when no target. Spec needed:
+  - Pattern: raster (left↔right + small pitch step), spiral, random walk?
+  - Trigger: idle for N seconds with no offset signal → enter scan mode.
+  - Exit: any offset message OR `is_firing` message → drop scan, hand control back to Python.
+  - Use `stepDelta()` with safe deltas; limit switches halt the leg, then reverse direction.
+
 ## Pending decisions / unknowns
 
 - **DRV8825 sense resistor variant unconfirmed.** Vref → Imax math assumes R100 (0.1 Ω → `Imax = 2 × Vref`). If boards are actually R050 (0.05 Ω), real currents are double the logged values. Read silkscreen on the SMD resistors near motor terminals when convenient. Empirical tune worked either way; this is for record-keeping.
@@ -166,6 +178,12 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
 
 ## Recent changes
 
+- **2026-05-17** main_control: added `aim()` — parallax compensation. On firing edge (false→true) pitch shifts UP by `PITCH_AIM_OFFSET_STEPS` before laser turns on; on firing-off edge motor shifts back DOWN. Both Python (`is_firing`) and bench (`{cmd:"laser"}`) paths apply it. Tune in config.h. Set to 0 to disable.
+- **2026-05-17** main_control: **stripped position tracker, homing, software range clamp**. Pure delta motion now — limit switches are the only constraint. Reason: mechanical stress was advancing the tracker out of sync with real motor position, causing the absolute model to refuse moves into space that was actually available. New primitive `stepDelta()` replaces `moveAxis()`. `home()`, `sweepToLimit()`, `backoffFromLimit()`, `yawPos`/`pitchPos`/`homed` globals, `YAW_RANGE_STEPS`/`PITCH_RANGE_STEPS`, `{"cmd":"home"}` all removed.
+- **2026-05-17** Laser hardware repaired (burned resistor replaced). Bench-fires from general_test. main_control still skips driving PIN_LASER (legacy guard while hw was dead) — logged as new Open #1, fix in progress.
+- **2026-05-17** Added Backlog section: tracking-quality improvements + autonomous scanning routine for main_control. Reminders for next development pass.
+- **2026-05-17** main_control: tracking sluggishness fix. Replaced `KP_*` float-gain model with integer divisor + deadzone + min-1-step floor (`PX_PER_STEP_YAW/PITCH`, `DEAD_ZONE_PX`). Sub-1-step offsets now generate motion instead of rounding to zero. Cut `DIR_SETUP_MS` from 50 → 1 (was wasting 100 ms per Python message; DRV8825 spec is ~650 ns). Pattern proven by old `motor_serial_test` — implementation written fresh, no copy.
+- **2026-05-17** main_control: Arduino now accepts Python's production schema `{"type":"data","key":"current_target_offset","value":[x,y]}` and `{"type":"data","key":"is_firing","value":bool}`. Pixel offsets converted to step deltas via `KP_YAW`/`KP_PITCH` gains (config.h). Yellow LED auto-tracks fresh target signals via `TARGET_SIGNAL_STALE_MS` window. Bench `{cmd:...}` schema still supported in parallel. Python protocol unchanged.
 - **2026-05-17** main_control: added limit switches, motor primitives, homing on boot, position tracker, ArduinoJson v7 link to Jetson (line-delimited JSON over USB Serial). Schema documented in sketch header.
 - **2026-05-17** main_control: scaffolded with LED layer (green = on, yellow = DETECTED, red = laser firing flag).
 - **2026-05-17** Sanity check confirmed yaw DIR is genuinely dead — `RELEASE FAKE` fires correctly. Open #2 updated with 3 fix paths (replace jumper / move pin / test driver). No further software fix possible.

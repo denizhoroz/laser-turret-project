@@ -3,9 +3,11 @@ from pathlib import Path
 
 WINDOW_SIZE: tuple[int, int] = (640, 480)
 BASE_DIR: Path = Path(__file__).resolve().parent
-DEFAULT_WEIGHTS: Path = BASE_DIR / "models" / "best.pt"
+MODELS_DIR: Path = BASE_DIR / "models"
+MISSION1_WEIGHTS: Path = MODELS_DIR / "model-target1" / "best.pt"
+MISSION2_WEIGHTS: Path = MODELS_DIR / "model-target2" / "best.pt"
 DEVICE: str = "cuda"
-CAMERA: int = 0
+CAMERA: int = 1
 TARGET_LOSS_TIMEOUT: float = 2
 TARGET_FIRING_DURATION: float = 3
 ROI_DWELL_DURATION: float = 1.0   # target must stay in ROI this long before fire

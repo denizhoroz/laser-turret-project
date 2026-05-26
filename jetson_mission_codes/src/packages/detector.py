@@ -5,7 +5,7 @@ import ultralytics
 
 # Parameters
 from packages import tracker
-from packages.config import DEFAULT_WEIGHTS, DEVICE, CAMERA
+from packages.config import DEVICE, CAMERA
 
 class BoundingBox:
     """Represents a bounding box with coordinates, class ID, name, and confidence."""
@@ -23,12 +23,12 @@ class Detector:
         device (str): Inference device, e.g. "cuda" or "cpu".
         camera (int): Webcam index for video capture."""
 
-    def __init__(self, 
-                 weights: str = str(DEFAULT_WEIGHTS), 
+    def __init__(self,
+                 weights: str,
                  device: str = DEVICE,
                  camera: int = CAMERA,
                  **kwargs):
-        
+
         weights_path = Path(weights)
         assert weights_path.exists(), f"weights not found: {weights_path}"
 

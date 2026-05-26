@@ -6,6 +6,7 @@ from packages.config import (
     TARGET_LOSS_TIMEOUT,
     TARGET_FIRING_DURATION,
     ROI_DWELL_DURATION,
+    MISSION1_WEIGHTS,
 )
 
 from packages.detector import Detector
@@ -26,7 +27,7 @@ class TestDetect:
         self.ROI_DWELL: float = ROI_DWELL_DURATION
 
     def start(self):
-        detector = Detector()
+        detector = Detector(weights=str(MISSION1_WEIGHTS))
         tracker = Tracker(window_size=WINDOW_SIZE)
         detector.open_camera()
 
