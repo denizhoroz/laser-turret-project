@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 
 import cv2 as cv
@@ -6,6 +7,11 @@ import ultralytics
 # Parameters
 from packages import tracker
 from packages.config import DEVICE, CAMERA
+
+# Min seconds between camera-reopen attempts when the device is down.
+# Hammering VideoCapture() too fast on Windows MSMF can hang for several
+# hundred ms each call, starving the mission loop.
+_RECONNECT_INTERVAL_S = 1.0
 
 class BoundingBox:
     """Represents a bounding box with coordinates, class ID, name, and confidence."""
@@ -42,16 +48,39 @@ class Detector:
         self.conf = kwargs.get("conf", 0.50)
         self.iou = kwargs.get("iou", 0.45)
 
+        self._camera_down: bool = False
+        self._last_reconnect_attempt: float = 0.0
+
     def open_camera(self):
         """Opens the video capture for the specified camera index."""
         self.cap = cv.VideoCapture(self.camera)
         assert self.cap.isOpened(), f"cannot open camera index {self.camera}"
+        self._camera_down = False
 
     def close_camera(self):
         """Releases the video capture resource."""
         if hasattr(self, "cap") and self.cap.isOpened():
             self.cap.release()
             cv.destroyAllWindows()
+
+    def _try_reconnect(self) -> bool:
+        """Rate-limited camera reopen. Returns True on success."""
+        now = time.monotonic()
+        if now - self._last_reconnect_attempt < _RECONNECT_INTERVAL_S:
+            return False
+        self._last_reconnect_attempt = now
+        try:
+            if hasattr(self, "cap"):
+                self.cap.release()
+        except Exception:
+            pass
+        cap = cv.VideoCapture(self.camera)
+        if cap.isOpened():
+            self.cap = cap
+            self._camera_down = False
+            print("camera reconnected")
+            return True
+        return False
 
     def detect(self):
         """Runs a single object detection pass and returns the frame with bounding boxes.
@@ -62,10 +91,22 @@ class Detector:
                 boxes (list[dict]): Detected bounding boxes and metadata.
         """
 
-        ret, frame = self.cap.read()
-        if not ret:
-            print("failed to read frame from camera")
-            return None, []
+        if self._camera_down:
+            self._try_reconnect()
+            return None
+
+        try:
+            ret, frame = self.cap.read()
+        except Exception as e:
+            print(f"camera read raised: {e} — will retry")
+            self._camera_down = True
+            return None
+
+        if not ret or frame is None:
+            if not self._camera_down:
+                print("camera disconnected — will retry until reconnected")
+            self._camera_down = True
+            return None
 
         results = self.model.predict(frame,
                                         device=self.device,

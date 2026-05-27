@@ -12,6 +12,14 @@
 static char rxBuf[SERIAL_LINE_BUF];
 static int  rxLen = 0;
 
+// Latest pending offset from Python. New offsets overwrite older ones — by the
+// time the main loop calls `flushPendingOffset`, only the freshest survives.
+// Prevents stale-offset pile-up when applyOffset() blocks longer than Python's
+// send interval.
+static int  pendingOx        = 0;
+static int  pendingOy        = 0;
+static bool hasPendingOffset = false;
+
 // =============================================================================
 // MANUAL SINGLE-CHAR MENU (bench testing only)
 // =============================================================================
@@ -44,9 +52,15 @@ static void handleOffsetData(JsonVariantConst value) {
   if (!value.is<JsonArrayConst>()) return;
   JsonArrayConst arr = value.as<JsonArrayConst>();
   if (arr.size() < 2) return;
-  int ox = arr[0] | 0;
-  int oy = arr[1] | 0;
-  applyOffset(ox, oy);
+  pendingOx        = arr[0] | 0;
+  pendingOy        = arr[1] | 0;
+  hasPendingOffset = true;   // newer overwrites older — flushed once per loop tick
+}
+
+void flushPendingOffset() {
+  if (!hasPendingOffset) return;
+  hasPendingOffset = false;
+  applyOffset(pendingOx, pendingOy);
 }
 
 static void handleIsFiringData(bool on) {

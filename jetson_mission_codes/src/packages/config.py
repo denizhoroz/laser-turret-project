@@ -12,7 +12,7 @@ TARGET_LOSS_TIMEOUT: float = 2
 TARGET_FIRING_DURATION: float = 3
 MOVING_TARGET_TRACKING_DURATION: float = 60.0 # how long to track the moving target 
 ROI_DWELL_DURATION: float = 1.0   # target must stay in ROI this long before fire
-TCAREA_RATIO: float = 0.8        # TCArea side as fraction of bbox side
+TCAREA_RATIO: float = 0.6        # TCArea side as fraction of bbox side
 
 # Parallax compensation: camera and laser are mounted apart, so when the
 # camera sees the target centered the laser beam still misses. Bias the

@@ -53,7 +53,7 @@ constexpr long          MAX_SWEEP_STEPS      = 20000;  // safety cap per sweep
 // Back-off after limit release. Must stay SMALL relative to axis travel.
 // Axis travel in full-step mode: pitch ~56 steps (~100°), yaw 150 steps (270°).
 // Old shared value of 100 steps overshot pitch entirely. Per-axis now.
-constexpr int           PITCH_SAFETY_MARGIN_STEPS = 3;  // ~5.4° clearance
+constexpr int           PITCH_SAFETY_MARGIN_STEPS = 10;  // ~5.4° clearance
 constexpr int           YAW_SAFETY_MARGIN_STEPS   = 8;  // ~14.4° clearance
 
 constexpr int           RELEASE_CHUNK_STEPS  = 1;      // per-step check during backoff
@@ -87,9 +87,9 @@ constexpr int  SERIAL_LINE_BUF   = 256;
 // to prevent single-step overshoot from causing limit-cycle oscillation.
 constexpr int  DEAD_ZONE_PX_YAW    = 8;
 constexpr int  DEAD_ZONE_PX_PITCH  = 10;
-constexpr int  PX_PER_STEP_YAW     = 12;
-constexpr int  PX_PER_STEP_PITCH   = 12;
-constexpr long MAX_STEP_PER_TICK   = 20;
+constexpr int  PX_PER_STEP_YAW     = 60;
+constexpr int  PX_PER_STEP_PITCH   = 60;
+constexpr long MAX_STEP_PER_TICK   = 8;
 
 // Auto-state for yellow LED. If no offset/fire message arrives for this long,
 // yellow turns off (system likely back to scanning/idle).

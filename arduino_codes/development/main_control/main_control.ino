@@ -9,6 +9,7 @@
 //   motor.h/.cpp    — stepOnce + stepDelta primitive (limit-watching)
 //   laser.h/.cpp    — setFiring (PIN_LASER + LED coordinator)
 //   tracking.h/.cpp — applyOffset (pixel → step deltas). Parallax handled Python-side.
+//   limit_recovery.h/.cpp — autonomous backoff from triggered limit switches.
 //   commands.h/.cpp — bench {"cmd":"..."} handlers
 //   serial_link.h/.cpp — outbound JSON (events, status, acks)
 //   dispatch.h/.cpp — inbound line buffer + JSON parse + route
@@ -36,6 +37,7 @@
 #include "switches.h"
 #include "leds.h"
 #include "dispatch.h"
+#include "limit_recovery.h"
 
 void setup() {
   Serial.begin(BAUD);
@@ -70,6 +72,9 @@ void loop() {
   while (Serial.available()) {
     feedSerialChar(Serial.read());
   }
+
+  flushPendingOffset();
+  recoverFromLimits();
 
   // Refresh LEDs periodically so yellow drops when the target signal goes
   // stale (no recent offset/fire message from Python).
