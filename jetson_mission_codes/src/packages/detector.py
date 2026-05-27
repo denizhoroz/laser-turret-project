@@ -114,7 +114,10 @@ class Detector:
                                         iou=self.iou,
                                         verbose=False)
 
-        boxes = []
+        # One detection per frame per class: if a class appears more than once,
+        # keep only its highest-confidence box. Stops the tracker from flipping
+        # between two same-class boxes (e.g. two circles) in the same frame.
+        best_per_class = {}
         if len(results) > 0 and len(results[0].boxes) > 0:
             xyxy = results[0].boxes.xyxy.tolist()
             cls_ids = results[0].boxes.cls.tolist() if results[0].boxes.cls is not None else []
@@ -133,8 +136,11 @@ class Detector:
                                   class_id=cid,
                                   confidence=confs[idx] if idx < len(confs) else None,
                                   class_name=cname)
-                boxes.append(box)
+                existing = best_per_class.get(cid)
+                if existing is None or (box.confidence or 0) > (existing.confidence or 0):
+                    best_per_class[cid] = box
 
+        boxes = list(best_per_class.values())
         return frame, boxes
     
     def display(self, frame, boxes, **kwargs):

@@ -88,13 +88,13 @@ constexpr long MAX_STEP_PER_TICK   = 8;
 //   Kp dominates response to current error.
 //   Kd damps rapid swings (kills oscillation).
 //   Ki chips away at small persistent errors (steady-state correction).
-constexpr float PID_KP_YAW    = 0.03f;
-constexpr float PID_KI_YAW    = 0.01f;
-constexpr float PID_KD_YAW    = 0.25f;
+constexpr float PID_KP_YAW    = 0.030f;
+constexpr float PID_KI_YAW    = 0.000f;
+constexpr float PID_KD_YAW    = 0.005f;
 
-constexpr float PID_KP_PITCH  = 0.03f;
-constexpr float PID_KI_PITCH  = 0.01f;
-constexpr float PID_KD_PITCH  = 0.25f;
+constexpr float PID_KP_PITCH  = 0.030f;
+constexpr float PID_KI_PITCH  = 0.000f;
+constexpr float PID_KD_PITCH  = 0.005f;
 
 // Anti-windup clamp on the integral term (units = px·s).
 constexpr float PID_INTEGRAL_LIMIT = 100.0f;
