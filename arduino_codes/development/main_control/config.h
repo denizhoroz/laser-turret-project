@@ -83,9 +83,12 @@ constexpr int  SERIAL_LINE_BUF   = 256;
 //
 // Tune per-axis: lower divisor = more aggressive (more steps per px).
 // =============================================================================
-constexpr int  DEAD_ZONE_PX        = 5;
-constexpr int  PX_PER_STEP_YAW     = 24;
-constexpr int  PX_PER_STEP_PITCH   = 24;
+// Per-axis deadzone. Must satisfy DEAD_ZONE_PX_* >= PX_PER_STEP_* / 2 + 1
+// to prevent single-step overshoot from causing limit-cycle oscillation.
+constexpr int  DEAD_ZONE_PX_YAW    = 8;
+constexpr int  DEAD_ZONE_PX_PITCH  = 10;
+constexpr int  PX_PER_STEP_YAW     = 12;
+constexpr int  PX_PER_STEP_PITCH   = 12;
 constexpr long MAX_STEP_PER_TICK   = 20;
 
 // Auto-state for yellow LED. If no offset/fire message arrives for this long,
@@ -93,17 +96,9 @@ constexpr long MAX_STEP_PER_TICK   = 20;
 constexpr unsigned long TARGET_SIGNAL_STALE_MS = 1500;
 
 // =============================================================================
-// AIMING — parallax compensation
-//
-// Camera and laser are mounted on different rigs; their optical axes don't
-// converge at zero. When the camera reports the target centered, the laser
-// is still offset by the parallax distance. Right before firing, shift pitch
-// UP by PITCH_AIM_OFFSET_STEPS, then shift back DOWN after firing ends so
-// vision-driven tracking continues from the camera-aligned position.
-//
-// Tune by firing at a target at typical engagement distance:
-//   laser lands BELOW target → raise PITCH_AIM_OFFSET_STEPS.
-//   laser lands ABOVE target → lower (negative is fine — laser sits above cam).
-// Set to 0 to disable.
+// PARALLAX — handled Python-side.
+// `tracker.py` now shifts the virtual aim point inside `Tracker.track()` so
+// both the commanded offset and the in_roi check use the same biased target.
+// Arduino is a dumb motor controller; it acts on whatever offset Python sends.
+// Tune `PARALLAX_BIAS_Y_PX` in `jetson_mission_codes/src/packages/config.py`.
 // =============================================================================
-constexpr long PITCH_AIM_OFFSET_STEPS = 5;  // ~5.4° up before firing

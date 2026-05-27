@@ -2,21 +2,13 @@
 #include "laser.h"
 #include "config.h"
 #include "state.h"
-#include "aim.h"
 #include "leds.h"
 
+// Parallax is now applied continuously inside tracking.applyOffset(), not on
+// firing edges. setFiring is a pure laser-pin + LED coordinator.
 void setFiring(bool on) {
   if (on == laserFiring) return;
-
-  if (on) {
-    aim(true);                                  // shift pitch up to compensate parallax
-    laserFiring = true;
-    digitalWrite(PIN_LASER, HIGH);
-  } else {
-    digitalWrite(PIN_LASER, LOW);
-    laserFiring = false;
-    aim(false);                                 // shift back so vision tracking resumes aligned
-  }
-
+  laserFiring = on;
+  digitalWrite(PIN_LASER, laserFiring ? HIGH : LOW);
   updateLeds();
 }

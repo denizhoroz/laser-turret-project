@@ -7,9 +7,8 @@
 //   switches.h/.cpp — limit-switch debounce
 //   leds.h/.cpp     — green/yellow/red indicator logic
 //   motor.h/.cpp    — stepOnce + stepDelta primitive (limit-watching)
-//   aim.h/.cpp      — parallax compensation on firing edges
-//   laser.h/.cpp    — setFiring (PIN_LASER + aim + LED coordinator)
-//   tracking.h/.cpp — applyOffset (pixel → step deltas via divisor model)
+//   laser.h/.cpp    — setFiring (PIN_LASER + LED coordinator)
+//   tracking.h/.cpp — applyOffset (pixel → step deltas). Parallax handled Python-side.
 //   commands.h/.cpp — bench {"cmd":"..."} handlers
 //   serial_link.h/.cpp — outbound JSON (events, status, acks)
 //   dispatch.h/.cpp — inbound line buffer + JSON parse + route

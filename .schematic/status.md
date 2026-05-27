@@ -179,6 +179,8 @@ Resolution: 1 step = 1.8° on the turret. Low resolution — if finer aim needed
 
 ## Recent changes
 
+- **2026-05-27** Parallax compensation moved to Python (`Tracker.track()` in `jetson_mission_codes/src/packages/tracker.py`). `TCPoint` is shifted UP by `PARALLAX_BIAS_Y_PX` (config.py) so both the commanded offset and the `in_roi` check refer to the same virtual aim point. Works for m1 (dwell-then-fire) and m2 (continuous track + fire) without per-mission code paths. Arduino is now a dumb motor controller — `tracking.applyOffset()` no longer biases; `PARALLAX_BIAS_Y_PX` removed from Arduino config.h.
+- **2026-05-27** main_control: replaced discrete firing-edge `aim()` shift with **continuous parallax bias** inside `applyOffset()`. Every incoming offset now has `PARALLAX_BIAS_Y_PX` subtracted from its Y before conversion → motor always aims biased-up. Cleaner for m2 continuous tracking (no aim "absorption" during sustained fire). `aim.h/.cpp` removed; `laser.setFiring()` is now a pure laser-pin coordinator.
 - **2026-05-17** main_control: refactored single-file `.ino` into per-concern modules. New file layout:
   - `state` (globals) · `switches` (debounce) · `leds` (indicators) · `motor` (stepDelta primitive)
   - `aim` (parallax) · `laser` (fire control) · `tracking` (px → step deltas)
