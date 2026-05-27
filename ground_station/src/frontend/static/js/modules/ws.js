@@ -5,7 +5,7 @@ import { logLine } from './log.js';
 import { setConnected } from './connection.js';
 import { renderTelemetry } from './telemetry.js';
 import { setDetections } from './overlay.js';
-import { setStarted } from './mission.js';
+import { setStarted, setMissionConnection } from './mission.js';
 import { els } from './dom.js';
 
 const WS_URL = `ws://${location.host}/ws/telemetry`;
@@ -33,8 +33,8 @@ function handleMessage(msg) {
   switch (msg.type) {
     case 'connection':
       setConnected(!!msg.connected);
+      setMissionConnection(!!msg.connected);
       logLine(msg.connected ? 'ok' : 'warn', `Jetson ${msg.connected ? 'connected' : 'disconnected'}`);
-      if (!msg.connected) setStarted(false);
       break;
     case 'telemetry':
       renderTelemetry(msg.data || msg);
@@ -85,7 +85,7 @@ function connect() {
   ws.addEventListener('close', () => {
     logLine('warn', 'WS closed');
     setConnected(false);
-    setStarted(false);
+    setMissionConnection(false);
     scheduleReconnect();
   });
 

@@ -76,6 +76,11 @@ jetson_link = JetsonLink(
     port=int(os.environ.get("JETSON_LINK_PORT", "9001")),
 )
 
+# Whether GS believes a mission is currently active on the Jetson. Flipped to
+# True on a successful /api/mission/start, back to False on /api/mission/stop
+# or on Jetson disconnect (mission is implicitly aborted with the link).
+mission_active: bool = False
+
 
 async def on_jetson_message(msg: dict) -> None:
     """Forward Jetson-originated frames to all WS clients."""
@@ -106,11 +111,18 @@ async def on_jetson_message(msg: dict) -> None:
 
 
 async def on_jetson_connect(connected: bool) -> None:
+    global mission_active
     await ws_manager.broadcast({"type": "connection", "connected": connected})
     await ws_manager.broadcast({
         "type": "log",
         "text": "Jetson link UP" if connected else "Jetson link DOWN",
     })
+    if not connected and mission_active:
+        mission_active = False
+        await ws_manager.broadcast({
+            "type": "log",
+            "text": "Mission force-stopped (Jetson disconnected)",
+        })
 
 
 jetson_link.on_message = on_jetson_message
@@ -166,11 +178,24 @@ class MissionStart(BaseModel):
 
 @app.post("/api/mission/start")
 async def mission_start(body: MissionStart):
+    global mission_active
     mission = MISSION_TYPE_MAP.get(body.mission_type)
     if mission is None:
         return JSONResponse({"ok": False, "error": "unknown mission_type"}, status_code=400)
 
+    if not jetson_link.connected:
+        await ws_manager.broadcast({
+            "type": "log",
+            "text": "MISSION_START refused: Jetson disconnected",
+        })
+        return JSONResponse(
+            {"ok": False, "error": "jetson_disconnected", "link_connected": False},
+            status_code=503,
+        )
+
     sent = await jetson_link.send({"type": "mission_start", "mission": mission})
+    if sent:
+        mission_active = True
     log.info("MISSION_START mission_type=%s -> jetson sent=%s", body.mission_type, sent)
     await ws_manager.broadcast({
         "type": "log",
@@ -181,7 +206,9 @@ async def mission_start(body: MissionStart):
 
 @app.post("/api/mission/stop")
 async def mission_stop():
+    global mission_active
     sent = await jetson_link.send({"type": "mission_stop"})
+    mission_active = False
     log.info("MISSION_STOP -> jetson sent=%s", sent)
     await ws_manager.broadcast({
         "type": "log",
