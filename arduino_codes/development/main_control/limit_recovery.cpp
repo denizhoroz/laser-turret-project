@@ -30,13 +30,12 @@ void recoverFromLimits() {
     moved = true;
   }
 
+  // Down-limit recovery is intentionally disabled — if the head bottoms out,
+  // it stays there (no automatic upward bounce). Only the UP limit triggers
+  // a backoff, since that's the side prone to false-detection sky-stares.
   if (triggered(swU)) {
     stepDelta(PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US,
               -(long)PITCH_SAFETY_MARGIN_STEPS, &swD, &swU, "pitch");
-    moved = true;
-  } else if (triggered(swD)) {
-    stepDelta(PIN_PITCH_STEP, PIN_PITCH_DIR, PITCH_PULSE_US,
-              (long)PITCH_SAFETY_MARGIN_STEPS, &swD, &swU, "pitch");
     moved = true;
   }
 

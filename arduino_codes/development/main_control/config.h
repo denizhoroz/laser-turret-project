@@ -53,7 +53,7 @@ constexpr long          MAX_SWEEP_STEPS      = 20000;  // safety cap per sweep
 // Back-off after limit release. Must stay SMALL relative to axis travel.
 // Axis travel in full-step mode: pitch ~56 steps (~100°), yaw 150 steps (270°).
 // Old shared value of 100 steps overshot pitch entirely. Per-axis now.
-constexpr int           PITCH_SAFETY_MARGIN_STEPS = 10;  // ~5.4° clearance
+constexpr int           PITCH_SAFETY_MARGIN_STEPS = 8;  // ~5.4° clearance
 constexpr int           YAW_SAFETY_MARGIN_STEPS   = 8;  // ~14.4° clearance
 
 constexpr int           RELEASE_CHUNK_STEPS  = 1;      // per-step check during backoff
@@ -70,26 +70,34 @@ constexpr int  SERIAL_LINE_BUF   = 256;
 // Python sends pixel-offset of target from crosshair via
 //   {"type":"data","key":"current_target_offset","value":[x,y]}
 //
-// Conversion model: integer divisor + deadzone + min-1-step floor.
-//   if |offset| < DEAD_ZONE_PX: zero steps (anti-jitter).
-//   else: steps = max(1, |offset| / PX_PER_STEP_*), capped by MAX_STEP_PER_TICK.
-//
-// This guarantees small offsets still produce motion (vs. a float-gain model
-// that rounds sub-1.0 errors to zero and stalls tracking).
+// Control model: per-axis PID (see PID.h/.cpp).
+//   error_px → steps = clamp(Kp·e + Ki·∫e dt + Kd·de/dt, ±MAX_STEP_PER_TICK)
+//   |error_px| < DEAD_ZONE_PX_* → 0 steps + integral reset (anti-jitter,
+//     also stops integrator drift while parked on target).
 //
 // Direction signs:
 //   image x+ = right of crosshair → yaw should increase (move RIGHT).
 //   image y+ = below crosshair    → pitch should DECREASE (UP is +) → inverted in handler.
-//
-// Tune per-axis: lower divisor = more aggressive (more steps per px).
 // =============================================================================
-// Per-axis deadzone. Must satisfy DEAD_ZONE_PX_* >= PX_PER_STEP_* / 2 + 1
-// to prevent single-step overshoot from causing limit-cycle oscillation.
+// Per-axis deadzone (in-tolerance trigger; also resets the PID integrator).
 constexpr int  DEAD_ZONE_PX_YAW    = 8;
 constexpr int  DEAD_ZONE_PX_PITCH  = 10;
-constexpr int  PX_PER_STEP_YAW     = 60;
-constexpr int  PX_PER_STEP_PITCH   = 60;
 constexpr long MAX_STEP_PER_TICK   = 8;
+
+// PID gains (arbitrary starting values — tune empirically per axis).
+//   Kp dominates response to current error.
+//   Kd damps rapid swings (kills oscillation).
+//   Ki chips away at small persistent errors (steady-state correction).
+constexpr float PID_KP_YAW    = 0.03f;
+constexpr float PID_KI_YAW    = 0.01f;
+constexpr float PID_KD_YAW    = 0.25f;
+
+constexpr float PID_KP_PITCH  = 0.03f;
+constexpr float PID_KI_PITCH  = 0.01f;
+constexpr float PID_KD_PITCH  = 0.25f;
+
+// Anti-windup clamp on the integral term (units = px·s).
+constexpr float PID_INTEGRAL_LIMIT = 100.0f;
 
 // Auto-state for yellow LED. If no offset/fire message arrives for this long,
 // yellow turns off (system likely back to scanning/idle).

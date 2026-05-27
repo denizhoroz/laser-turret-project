@@ -9,6 +9,7 @@
 //   motor.h/.cpp    — stepOnce + stepDelta primitive (limit-watching)
 //   laser.h/.cpp    — setFiring (PIN_LASER + LED coordinator)
 //   tracking.h/.cpp — applyOffset (pixel → step deltas). Parallax handled Python-side.
+//   PID.h/.cpp      — per-axis PID controller (offset px → step delta).
 //   limit_recovery.h/.cpp — autonomous backoff from triggered limit switches.
 //   commands.h/.cpp — bench {"cmd":"..."} handlers
 //   serial_link.h/.cpp — outbound JSON (events, status, acks)
@@ -38,6 +39,7 @@
 #include "leds.h"
 #include "dispatch.h"
 #include "limit_recovery.h"
+#include "PID.h"
 
 void setup() {
   Serial.begin(BAUD);
@@ -63,6 +65,7 @@ void setup() {
   updateLeds();
   delay(100);
   seedSwitches();
+  pidReset();
 
   Serial.println();
   Serial.println(F("# main_control ready (delta-only mode, no homing)."));
