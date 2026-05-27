@@ -31,6 +31,14 @@ class SystemState:
         self.system_state = new_state
         if self.link:
             self.link.send({"type": "state", "state": new_state})
+        # Notify the Arduino so it can drive scanning vs. tracking behavior.
+        # Additive — rides the existing data channel, does not touch the
+        # current_target_offset wire format.
+        if self.Arduino:
+            try:
+                self.Arduino.send({"type": "data", "key": "system_state", "value": new_state})
+            except Exception as e:
+                print(f"[arduino send error] {e}")
 
     def set_mission(self, new_mission: str):
         """Sets the current mission of the system."""

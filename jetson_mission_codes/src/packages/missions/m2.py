@@ -23,6 +23,7 @@ from packages.config import (
     WINDOW_SIZE,
     MISSION2_WEIGHTS,
     TARGET_LOSS_TIMEOUT,
+    TARGET_CONFIRM_FRAMES,
 )
 from packages.detector import Detector
 from packages.tracker import Tracker
@@ -62,7 +63,9 @@ class Mission2:
         detector.open_camera()
 
         firing = False                       # local mirror of is_firing sent to Arduino
-        lost_since: float | None = None      # epoch when target first vanished
+        lost_since: float | None = None      # epoch when target first vanished (while tracking)
+        tracking_active = False              # False = scanning, True = locked on a target
+        confirm_streak = 0                   # consecutive frames a target has been picked
 
         self.system_state.set_state("scanning")
 
@@ -79,7 +82,16 @@ class Mission2:
 
             picked = self._pick_target(boxes) if boxes else None
 
-            if picked is not None:
+            # Confirmation streak: a target must be picked for TARGET_CONFIRM_FRAMES
+            # consecutive frames before we leave scanning. Once tracking, brief
+            # misses are tolerated by the TIMEOUT grace below (hysteresis), so a
+            # 1-frame false positive can't yank us out of the scan sweep.
+            confirm_streak = confirm_streak + 1 if picked is not None else 0
+            if not tracking_active and confirm_streak >= TARGET_CONFIRM_FRAMES:
+                tracking_active = True
+                lost_since = None
+
+            if tracking_active and picked is not None:
                 lost_since = None
                 self.system_state.set_state("tracking")
 
@@ -107,20 +119,26 @@ class Mission2:
                     f"in_roi={self.in_roi} firing={firing}"
                 )
             else:
-                # No target visible this frame.
+                # Either scanning (target not yet confirmed) or tracking with the
+                # target missing this frame.
                 self.offset = (0, 0)
                 self.in_roi = False
 
-                # Drop laser immediately on target loss — safer than waiting
-                # the loss-timeout window for the fire flag.
+                # Drop laser immediately on target loss.
                 if firing:
                     firing = False
                     self.system_state.send_data("is_firing", False)
 
-                # Loss-timeout grace before declaring scan mode.
-                if lost_since is None:
-                    lost_since = now
-                elif (now - lost_since) >= self.TIMEOUT:
+                if tracking_active:
+                    # Was locked on; target missing. Grace before dropping to scan.
+                    if lost_since is None:
+                        lost_since = now
+                    elif (now - lost_since) >= self.TIMEOUT:
+                        tracking_active = False
+                        confirm_streak = 0
+                        self.system_state.set_state("scanning")
+                else:
+                    # Still scanning (confirming or nothing seen).
                     self.system_state.set_state("scanning")
 
             self.system_state.send_frame(frame, boxes)

@@ -104,6 +104,24 @@ constexpr float PID_INTEGRAL_LIMIT = 100.0f;
 constexpr unsigned long TARGET_SIGNAL_STALE_MS = 1500;
 
 // =============================================================================
+// SCANNING (autonomous target search — see scanning.h/.cpp)
+// Runs while STATE_SCANNING. Cooperative chunked motion so the loop can break
+// out the instant a target reappears.
+// =============================================================================
+// Steps per scanTick() chunk. Smaller = more responsive to a target appearing
+// mid-sweep (loop re-checks serial between chunks), but slower scan rate.
+constexpr int  SCAN_CHUNK_STEPS = 4;
+
+// Pulse half-period for scanning moves. LARGER than the tracking pulse so the
+// search sweep is slow and gentle, not a full-power slew. Raise to slow further.
+constexpr unsigned long SCAN_PULSE_US = 16000;
+
+// Pitch steps from the DOWN limit up to "parallel with the horizon".
+// CALIBRATE on the rig: home down, jog up until the barrel is level, count the
+// steps, put that number here. Pitch travel is ~56 steps total.
+constexpr long PITCH_LEVEL_FROM_DOWN_STEPS = 20;
+
+// =============================================================================
 // PARALLAX — handled Python-side.
 // `tracker.py` now shifts the virtual aim point inside `Tracker.track()` so
 // both the commanded offset and the in_roi check use the same biased target.

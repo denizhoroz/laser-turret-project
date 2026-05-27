@@ -6,6 +6,8 @@
 #include "state.h"
 #include "tracking.h"
 #include "laser.h"
+#include "leds.h"
+#include "scanning.h"
 #include "commands.h"
 #include "serial_link.h"
 
@@ -68,11 +70,31 @@ static void handleIsFiringData(bool on) {
   setFiring(on);
 }
 
+// Jetson mission state. Vocabulary differs from the bench cmd schema:
+// idle / scanning / tracking / firing. tracking+firing both mean "target
+// acquired" → STATE_DETECTED. Entering scanning restarts the sweep from home.
+static void handleSystemStateData(const char* v) {
+  if (!v) return;
+  SystemState ns;
+  if      (!strcmp(v, "idle"))     ns = STATE_IDLE;
+  else if (!strcmp(v, "scanning")) ns = STATE_SCANNING;
+  else if (!strcmp(v, "tracking")) ns = STATE_DETECTED;
+  else if (!strcmp(v, "firing"))   ns = STATE_DETECTED;
+  else return;   // unknown state ignored
+
+  if (ns != currentState) {
+    if (ns == STATE_SCANNING) scanReset();   // fresh sweep from vertical home
+    currentState = ns;
+    updateLeds();
+  }
+}
+
 static void dispatchPythonData(JsonDocument &doc) {
   const char* key = doc["key"] | (const char*)nullptr;
   if (!key) return;
   if      (!strcmp(key, "current_target_offset")) handleOffsetData(doc["value"]);
   else if (!strcmp(key, "is_firing"))             handleIsFiringData(doc["value"] | false);
+  else if (!strcmp(key, "system_state"))          handleSystemStateData(doc["value"] | (const char*)nullptr);
   // unknown keys silently ignored
 }
 

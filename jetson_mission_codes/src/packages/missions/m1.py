@@ -8,6 +8,7 @@ from packages.config import (
     TARGET_FIRING_DURATION,
     ROI_DWELL_DURATION,
     MISSION1_WEIGHTS,
+    TARGET_CONFIRM_FRAMES,
 )
 
 from packages.detector import Detector
@@ -41,6 +42,8 @@ class Mission1:
         fire_until = 0.0
         in_roi_since: float | None = None
         selected_lost_since: float | None = None  # epoch when selected target first vanished
+        candidate_id: float | None = None          # class id being confirmed before selection
+        candidate_streak = 0                        # consecutive frames the candidate was seen
 
         self.system_state.set_state("scanning")
         while not self.system_state.stop_requested:
@@ -79,43 +82,69 @@ class Mission1:
 
             # Calculate offsets and check if targets are in ROI
             if boxes:
-                seen_selected = False
-                for box in boxes:
-                    target_id = box.class_id if box.class_id is not None else -1
+                # Confirmation-gated selection: an eligible candidate (a class
+                # not yet in the target pool) must persist for
+                # TARGET_CONFIRM_FRAMES consecutive frames before we commit to
+                # it. Stops a 1-frame false positive from hijacking tracking and
+                # yanking the turret out of its scan sweep.
+                if self.selected_target_id is None:
+                    eligible_id = None
+                    for box in boxes:
+                        tid = box.class_id if box.class_id is not None else -1
+                        if tid not in self.target_pool:
+                            eligible_id = tid
+                            break
+                    if eligible_id is not None and eligible_id == candidate_id:
+                        candidate_streak += 1
+                    else:
+                        candidate_id = eligible_id
+                        candidate_streak = 1 if eligible_id is not None else 0
 
-                    # If no target is currently selected and the detected target is not in the target pool, select it and start tracking
-                    if self.selected_target_id is None and target_id not in self.target_pool:
-                        print(f"Selected target ID: {target_id} for tracking.")
-                        self.selected_target_id = target_id
+                    if candidate_id is not None and candidate_streak >= TARGET_CONFIRM_FRAMES:
+                        self.selected_target_id = candidate_id
                         self.system_state.set_state("tracking")
-
-                    # If the detected target is the currently selected target, continue tracking it
-                    if target_id == self.selected_target_id:
-                        seen_selected = True
-                        self.offset, self.in_roi = tracker.track(box)
-
-                        # Freeze motors once in ROI so dwell window can complete.
-                        if not self.in_roi:
-                            self.system_state.send_data("current_target_offset", self.offset)
-
-                        print(f"Offset: {self.offset}, In ROI: {self.in_roi}, Tracking target ID: {self.selected_target_id}")
-
-                # Selected target lost: start grace timer; drop only after TIMEOUT.
-                if self.selected_target_id is not None and not seen_selected:
-                    if selected_lost_since is None:
-                        selected_lost_since = now
-                    elif (now - selected_lost_since) >= self.TIMEOUT:
-                        print(f"Selected target ID: {self.selected_target_id} lost > {self.TIMEOUT}s; clearing.")
-                        self.selected_target_id = None
-                        self.selected_box = None
+                        print(f"Selected target ID: {self.selected_target_id} for tracking (confirmed).")
+                        candidate_id = None
+                        candidate_streak = 0
+                    else:
+                        # Still confirming — stay scanning, no motion commands.
+                        self.offset = (0, 0)
                         self.in_roi = False
-                        selected_lost_since = None
                         self.system_state.set_state("scanning")
-                else:
-                    selected_lost_since = None  # target reacquired (or none selected)
+
+                # Track the committed target (if one exists).
+                seen_selected = False
+                if self.selected_target_id is not None:
+                    for box in boxes:
+                        target_id = box.class_id if box.class_id is not None else -1
+                        if target_id == self.selected_target_id:
+                            seen_selected = True
+                            self.offset, self.in_roi = tracker.track(box)
+
+                            # Freeze motors once in ROI so dwell window can complete.
+                            if not self.in_roi:
+                                self.system_state.send_data("current_target_offset", self.offset)
+
+                            print(f"Offset: {self.offset}, In ROI: {self.in_roi}, Tracking target ID: {self.selected_target_id}")
+
+                    # Selected target lost: start grace timer; drop only after TIMEOUT.
+                    if not seen_selected:
+                        if selected_lost_since is None:
+                            selected_lost_since = now
+                        elif (now - selected_lost_since) >= self.TIMEOUT:
+                            print(f"Selected target ID: {self.selected_target_id} lost > {self.TIMEOUT}s; clearing.")
+                            self.selected_target_id = None
+                            self.selected_box = None
+                            self.in_roi = False
+                            selected_lost_since = None
+                            self.system_state.set_state("scanning")
+                    else:
+                        selected_lost_since = None  # target reacquired
             else:
                 self.offset = (0, 0)
                 self.in_roi = False
+                candidate_id = None
+                candidate_streak = 0
                 if self.selected_target_id is not None:
                     if selected_lost_since is None:
                         selected_lost_since = now

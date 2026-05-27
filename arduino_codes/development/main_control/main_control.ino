@@ -10,6 +10,7 @@
 //   laser.h/.cpp    — setFiring (PIN_LASER + LED coordinator)
 //   tracking.h/.cpp — applyOffset (pixel → step deltas). Parallax handled Python-side.
 //   PID.h/.cpp      — per-axis PID controller (offset px → step delta).
+//   scanning.h/.cpp — autonomous search sweep while STATE_SCANNING.
 //   limit_recovery.h/.cpp — autonomous backoff from triggered limit switches.
 //   commands.h/.cpp — bench {"cmd":"..."} handlers
 //   serial_link.h/.cpp — outbound JSON (events, status, acks)
@@ -35,10 +36,12 @@
 //   Manual single-char bench cmds:  H - help · ? - status
 
 #include "config.h"
+#include "state.h"
 #include "switches.h"
 #include "leds.h"
 #include "dispatch.h"
 #include "limit_recovery.h"
+#include "scanning.h"
 #include "PID.h"
 
 void setup() {
@@ -76,7 +79,14 @@ void loop() {
     feedSerialChar(Serial.read());
   }
 
-  flushPendingOffset();
+  // While the Jetson reports scanning, run the autonomous search sweep.
+  // Otherwise consume the freshest target offset (tracking). The two are
+  // mutually exclusive — Python sends no offsets while scanning.
+  if (currentState == STATE_SCANNING && !halted) {
+    scanTick();
+  } else {
+    flushPendingOffset();
+  }
   recoverFromLimits();
 
   // Refresh LEDs periodically so yellow drops when the target signal goes

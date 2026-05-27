@@ -9,6 +9,10 @@ MISSION2_WEIGHTS: Path = MODELS_DIR / "model-target2" / "best.pt"
 DEVICE: str = "cuda"
 CAMERA: int = 1
 TARGET_LOSS_TIMEOUT: float = 2
+# Consecutive frames a target must be detected before the system commits to
+# tracking it (and leaves scanning). Filters single/few-frame false positives
+# (sky/ground noise) that would otherwise yank the turret out of its scan sweep.
+TARGET_CONFIRM_FRAMES: int = 2
 TARGET_FIRING_DURATION: float = 3
 MOVING_TARGET_TRACKING_DURATION: float = 60.0 # how long to track the moving target 
 ROI_DWELL_DURATION: float = 1.0   # target must stay in ROI this long before fire
