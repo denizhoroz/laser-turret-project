@@ -2,6 +2,7 @@
 import base64
 import time
 
+from packages.config import OFFSET_SEND_MAX_HZ
 from packages.missions.m1 import Mission1
 from packages.missions.m2 import Mission2
 from packages.missions.test_detect import TestDetect
@@ -20,6 +21,8 @@ class SystemState:
         self.frame_target_fps: float = 10.0
         self.frame_jpeg_quality: int = 70
         self.Arduino = arduino
+        # Throttle state for current_target_offset Arduino sends.
+        self._last_offset_arduino_ts: float = 0.0
 
     def set_state(self, new_state: str):
         """Sets the current state of the system."""
@@ -50,11 +53,22 @@ class SystemState:
             self.link.send({"type": "mission", "mission": new_mission})
 
     def send_data(self, key: str, value):
-        """Sends data to the system."""
+        """Sends data to the system.
+
+        High-frequency `current_target_offset` is rate-limited to
+        OFFSET_SEND_MAX_HZ on the ARDUINO link only (the web link still gets
+        every update for the UI). Prevents the Arduino's 64-byte UART RX
+        buffer from overflowing and corrupting subsequent state messages.
+        """
         self.system_data[key] = value
         if self.link:
             self.link.send({"type": "data", "key": key, "value": value})
         if self.Arduino:
+            if key == "current_target_offset":
+                now = time.time()
+                if now - self._last_offset_arduino_ts < 1.0 / max(0.1, OFFSET_SEND_MAX_HZ):
+                    return  # skip Arduino send; web UI already saw it
+                self._last_offset_arduino_ts = now
             try:
                 self.Arduino.send({"type": "data", "key": key, "value": value})
             except Exception as e:

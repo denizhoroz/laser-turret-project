@@ -9,10 +9,27 @@ MISSION2_WEIGHTS: Path = MODELS_DIR / "model-target2" / "best.pt"
 DEVICE: str = "cuda"
 CAMERA: int = 1
 TARGET_LOSS_TIMEOUT: float = 2
-# Consecutive frames a target must be detected before the system commits to
-# tracking it (and leaves scanning). Filters single/few-frame false positives
-# (sky/ground noise) that would otherwise yank the turret out of its scan sweep.
+# Frames a target must be seen (not necessarily consecutive — see tolerance
+# below) before the system commits to tracking it. Filters single/few-frame
+# false positives that would otherwise yank the turret out of its scan sweep.
 TARGET_CONFIRM_FRAMES: int = 2
+# How many no-detection frames can pass during confirmation before the streak
+# is wiped. Lets a real target survive brief detection drops while still
+# expiring stale candidates that genuinely vanished.
+CANDIDATE_MISS_TOLERANCE: int = 5
+# While tracking, how many CONSECUTIVE picks are required to consider the
+# target reacquired and reset the loss timer. Brief single-frame false
+# positives below this threshold are silently ignored (no Arduino traffic).
+# Lower = more responsive on real reacquisitions, but flickery false hits can
+# stretch the loss-grace and keep the LED lit.
+LOSS_REACQUIRE_FRAMES: int = 2
+# Max rate (Hz) at which current_target_offset messages are forwarded to the
+# Arduino. The Arduino MEGA's hardware UART RX buffer is 64 bytes; each offset
+# line is ~55 bytes and applyOffset blocks ~32 ms. Without throttling, bursts
+# can fill the buffer and corrupt the *next* incoming line (typically
+# system_state, causing scan-state-not-applied / yellow-stuck bugs). Critical
+# messages (system_state, is_firing) are NOT throttled — they're edge-triggered.
+OFFSET_SEND_MAX_HZ: float = 15.0
 TARGET_FIRING_DURATION: float = 3
 MOVING_TARGET_TRACKING_DURATION: float = 60.0 # how long to track the moving target 
 ROI_DWELL_DURATION: float = 1.0   # target must stay in ROI this long before fire

@@ -24,6 +24,8 @@ from packages.config import (
     MISSION2_WEIGHTS,
     TARGET_LOSS_TIMEOUT,
     TARGET_CONFIRM_FRAMES,
+    CANDIDATE_MISS_TOLERANCE,
+    LOSS_REACQUIRE_FRAMES,
 )
 from packages.detector import Detector
 from packages.tracker import Tracker
@@ -65,7 +67,9 @@ class Mission2:
         firing = False                       # local mirror of is_firing sent to Arduino
         lost_since: float | None = None      # epoch when target first vanished (while tracking)
         tracking_active = False              # False = scanning, True = locked on a target
-        confirm_streak = 0                   # consecutive frames a target has been picked
+        confirm_streak = 0                   # frames a target has been picked during confirmation
+        confirm_misses = 0                   # consecutive miss frames during confirmation
+        reacq_streak = 0                     # consecutive picks during loss-grace (gates lost_since reset)
 
         self.system_state.set_state("scanning")
 
@@ -82,19 +86,47 @@ class Mission2:
 
             picked = self._pick_target(boxes) if boxes else None
 
-            # Confirmation streak: a target must be picked for TARGET_CONFIRM_FRAMES
-            # consecutive frames before we leave scanning. Once tracking, brief
-            # misses are tolerated by the TIMEOUT grace below (hysteresis), so a
-            # 1-frame false positive can't yank us out of the scan sweep.
-            confirm_streak = confirm_streak + 1 if picked is not None else 0
+            # Confirmation streak (only relevant while not yet tracking). A target
+            # must be picked for TARGET_CONFIRM_FRAMES frames before we leave
+            # scanning. Brief no-detection frames are absorbed by
+            # CANDIDATE_MISS_TOLERANCE so a real but flickery target can still
+            # accumulate its streak. Once tracking_active, brief misses are
+            # tolerated by the TIMEOUT grace further below.
+            if picked is not None:
+                confirm_streak += 1
+                confirm_misses = 0
+            else:
+                confirm_misses += 1
+                if confirm_misses > CANDIDATE_MISS_TOLERANCE:
+                    confirm_streak = 0
+                    confirm_misses = 0
             if not tracking_active and confirm_streak >= TARGET_CONFIRM_FRAMES:
                 tracking_active = True
                 lost_since = None
+                confirm_streak = 0
+                confirm_misses = 0
+                reacq_streak = 0
+                print("[m2] target confirmed; tracking active")
 
             if tracking_active and picked is not None:
-                lost_since = None
-                self.system_state.set_state("tracking")
+                # If we're in loss-grace (lost_since set), require a reacq streak
+                # of LOSS_REACQUIRE_FRAMES consecutive picks before resetting the
+                # timer. Tentative picks below threshold send NO Arduino traffic,
+                # so a single false-positive flicker can't refresh the LED or
+                # extend the grace window.
+                if lost_since is not None:
+                    reacq_streak += 1
+                    if reacq_streak >= LOSS_REACQUIRE_FRAMES:
+                        lost_since = None
+                        reacq_streak = 0
+                        print(f"[m2] reacquired {picked.class_name}; resuming tracking")
+                    else:
+                        print(f"[m2] tentative pick {picked.class_name} (reacq {reacq_streak}/{LOSS_REACQUIRE_FRAMES})")
+                        self.system_state.send_frame(frame, boxes)
+                        continue
 
+                # Healthy tracking branch.
+                self.system_state.set_state("tracking")
                 self.offset, self.in_roi = tracker.track(picked)
 
                 # CONTINUOUS tracking — send offset every frame, even in ROI.
@@ -129,13 +161,19 @@ class Mission2:
                     firing = False
                     self.system_state.send_data("is_firing", False)
 
+                # Reset reacq streak on a miss — must be CONSECUTIVE picks.
+                reacq_streak = 0
+
                 if tracking_active:
                     # Was locked on; target missing. Grace before dropping to scan.
                     if lost_since is None:
                         lost_since = now
+                        print(f"[m2] target lost; grace starts (TIMEOUT={self.TIMEOUT}s)")
                     elif (now - lost_since) >= self.TIMEOUT:
                         tracking_active = False
                         confirm_streak = 0
+                        confirm_misses = 0
+                        print(f"[m2] loss confirmed (>{self.TIMEOUT}s); resuming scan")
                         self.system_state.set_state("scanning")
                 else:
                     # Still scanning (confirming or nothing seen).

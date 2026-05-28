@@ -86,6 +86,14 @@ static void handleSystemStateData(const char* v) {
     if (ns == STATE_SCANNING) scanReset();   // fresh sweep from vertical home
     currentState = ns;
     updateLeds();
+
+    // Emit a state-change event over USB serial so the host can verify the
+    // Arduino actually applied the message (debugging stuck-LED / no-scan
+    // issues where it's unclear whether the state ever crossed the wire).
+    JsonDocument ev;
+    ev["event"] = "state";
+    ev["value"] = stateName(currentState);
+    sendDoc(ev);
   }
 }
 

@@ -80,9 +80,9 @@ constexpr int  SERIAL_LINE_BUF   = 256;
 //   image y+ = below crosshair    → pitch should DECREASE (UP is +) → inverted in handler.
 // =============================================================================
 // Per-axis deadzone (in-tolerance trigger; also resets the PID integrator).
-constexpr int  DEAD_ZONE_PX_YAW    = 8;
-constexpr int  DEAD_ZONE_PX_PITCH  = 10;
-constexpr long MAX_STEP_PER_TICK   = 8;
+constexpr int  DEAD_ZONE_PX_YAW    = 4;
+constexpr int  DEAD_ZONE_PX_PITCH  = 4;
+constexpr long MAX_STEP_PER_TICK   = 20;
 
 // PID gains (arbitrary starting values — tune empirically per axis).
 //   Kp dominates response to current error.
@@ -90,11 +90,11 @@ constexpr long MAX_STEP_PER_TICK   = 8;
 //   Ki chips away at small persistent errors (steady-state correction).
 constexpr float PID_KP_YAW    = 0.030f;
 constexpr float PID_KI_YAW    = 0.000f;
-constexpr float PID_KD_YAW    = 0.005f;
+constexpr float PID_KD_YAW    = 0.010f;
 
 constexpr float PID_KP_PITCH  = 0.030f;
 constexpr float PID_KI_PITCH  = 0.000f;
-constexpr float PID_KD_PITCH  = 0.005f;
+constexpr float PID_KD_PITCH  = 0.010f;
 
 // Anti-windup clamp on the integral term (units = px·s).
 constexpr float PID_INTEGRAL_LIMIT = 100.0f;

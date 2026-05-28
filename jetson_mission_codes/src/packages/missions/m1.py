@@ -9,6 +9,7 @@ from packages.config import (
     ROI_DWELL_DURATION,
     MISSION1_WEIGHTS,
     TARGET_CONFIRM_FRAMES,
+    CANDIDATE_MISS_TOLERANCE,
 )
 
 from packages.detector import Detector
@@ -43,7 +44,8 @@ class Mission1:
         in_roi_since: float | None = None
         selected_lost_since: float | None = None  # epoch when selected target first vanished
         candidate_id: float | None = None          # class id being confirmed before selection
-        candidate_streak = 0                        # consecutive frames the candidate was seen
+        candidate_streak = 0                        # frames the candidate has been seen
+        candidate_misses = 0                        # consecutive frames the candidate was NOT seen
 
         self.system_state.set_state("scanning")
         while not self.system_state.stop_requested:
@@ -76,84 +78,98 @@ class Mission1:
                     self.selected_target_id = None
                     self.selected_box = None
                     self.system_state.send_data("is_firing", False)
+
+                    # Mission complete when every required target id has been
+                    # added to the pool. Tell the Arduino to stop scanning by
+                    # going idle, then exit the mission loop cleanly.
+                    if set(self.target_ids).issubset(set(self.target_pool)):
+                        print(f"[m1] All targets shot ({self.target_pool}) — mission complete. Going idle.")
+                        self.system_state.set_state("idle")
+                        self.system_state.send_frame(frame, boxes)
+                        detector.close_camera()
+                        return
+
                     self.system_state.set_state("scanning")
                 self.system_state.send_frame(frame, boxes)
                 continue
 
-            # Calculate offsets and check if targets are in ROI
-            if boxes:
-                # Confirmation-gated selection: an eligible candidate (a class
-                # not yet in the target pool) must persist for
-                # TARGET_CONFIRM_FRAMES consecutive frames before we commit to
-                # it. Stops a 1-frame false positive from hijacking tracking and
-                # yanking the turret out of its scan sweep.
-                if self.selected_target_id is None:
-                    eligible_id = None
+            # ---------- Confirmation gate (sticky candidate, miss-tolerant) ----------
+            # Only runs while no target is committed. The candidate is sticky:
+            # once chosen, its streak increments whenever that exact class
+            # appears in this frame's boxes (regardless of detection order).
+            # Brief detection drops are absorbed by CANDIDATE_MISS_TOLERANCE.
+            # Runs whether or not boxes is empty — empty frames count as misses.
+            if self.selected_target_id is None:
+                # Is the current candidate visible this frame (and still eligible)?
+                candidate_present = False
+                if candidate_id is not None:
                     for box in boxes:
                         tid = box.class_id if box.class_id is not None else -1
-                        if tid not in self.target_pool:
-                            eligible_id = tid
+                        if tid == candidate_id and tid not in self.target_pool:
+                            candidate_present = True
                             break
-                    if eligible_id is not None and eligible_id == candidate_id:
-                        candidate_streak += 1
-                    else:
-                        candidate_id = eligible_id
-                        candidate_streak = 1 if eligible_id is not None else 0
 
-                    if candidate_id is not None and candidate_streak >= TARGET_CONFIRM_FRAMES:
-                        self.selected_target_id = candidate_id
-                        self.system_state.set_state("tracking")
-                        print(f"Selected target ID: {self.selected_target_id} for tracking (confirmed).")
-                        candidate_id = None
-                        candidate_streak = 0
-                    else:
-                        # Still confirming — stay scanning, no motion commands.
-                        self.offset = (0, 0)
-                        self.in_roi = False
-                        self.system_state.set_state("scanning")
+                if candidate_present:
+                    candidate_streak += 1
+                    candidate_misses = 0
+                else:
+                    if candidate_id is not None:
+                        candidate_misses += 1
+                        if candidate_misses > CANDIDATE_MISS_TOLERANCE:
+                            candidate_id = None
+                            candidate_streak = 0
+                            candidate_misses = 0
+                    # If we have no current candidate, look for a new one.
+                    if candidate_id is None:
+                        for box in boxes:
+                            tid = box.class_id if box.class_id is not None else -1
+                            if tid not in self.target_pool:
+                                candidate_id = tid
+                                candidate_streak = 1
+                                candidate_misses = 0
+                                break
 
-                # Track the committed target (if one exists).
-                seen_selected = False
-                if self.selected_target_id is not None:
-                    for box in boxes:
-                        target_id = box.class_id if box.class_id is not None else -1
-                        if target_id == self.selected_target_id:
-                            seen_selected = True
-                            self.offset, self.in_roi = tracker.track(box)
+                if candidate_id is not None and candidate_streak >= TARGET_CONFIRM_FRAMES:
+                    self.selected_target_id = candidate_id
+                    self.system_state.set_state("tracking")
+                    print(f"Selected target ID: {self.selected_target_id} for tracking (confirmed).")
+                    candidate_id = None
+                    candidate_streak = 0
+                    candidate_misses = 0
+                else:
+                    # Still confirming — stay scanning, skip tracking/dwell this frame.
+                    self.offset = (0, 0)
+                    self.in_roi = False
+                    self.system_state.set_state("scanning")
+                    self.system_state.send_frame(frame, boxes)
+                    continue
 
-                            # Freeze motors once in ROI so dwell window can complete.
-                            if not self.in_roi:
-                                self.system_state.send_data("current_target_offset", self.offset)
+            # ---------- Track the committed target ----------
+            seen_selected = False
+            if boxes:
+                for box in boxes:
+                    target_id = box.class_id if box.class_id is not None else -1
+                    if target_id == self.selected_target_id:
+                        seen_selected = True
+                        self.offset, self.in_roi = tracker.track(box)
+                        # Freeze motors once in ROI so dwell window can complete.
+                        if not self.in_roi:
+                            self.system_state.send_data("current_target_offset", self.offset)
+                        print(f"Offset: {self.offset}, In ROI: {self.in_roi}, Tracking target ID: {self.selected_target_id}")
 
-                            print(f"Offset: {self.offset}, In ROI: {self.in_roi}, Tracking target ID: {self.selected_target_id}")
-
-                    # Selected target lost: start grace timer; drop only after TIMEOUT.
-                    if not seen_selected:
-                        if selected_lost_since is None:
-                            selected_lost_since = now
-                        elif (now - selected_lost_since) >= self.TIMEOUT:
-                            print(f"Selected target ID: {self.selected_target_id} lost > {self.TIMEOUT}s; clearing.")
-                            self.selected_target_id = None
-                            self.selected_box = None
-                            self.in_roi = False
-                            selected_lost_since = None
-                            self.system_state.set_state("scanning")
-                    else:
-                        selected_lost_since = None  # target reacquired
-            else:
+            if not seen_selected:
                 self.offset = (0, 0)
                 self.in_roi = False
-                candidate_id = None
-                candidate_streak = 0
-                if self.selected_target_id is not None:
-                    if selected_lost_since is None:
-                        selected_lost_since = now
-                    elif (now - selected_lost_since) >= self.TIMEOUT:
-                        print(f"Selected target ID: {self.selected_target_id} lost > {self.TIMEOUT}s; clearing.")
-                        self.selected_target_id = None
-                        self.selected_box = None
-                        selected_lost_since = None
-                self.system_state.set_state("scanning")
+                if selected_lost_since is None:
+                    selected_lost_since = now
+                elif (now - selected_lost_since) >= self.TIMEOUT:
+                    print(f"Selected target ID: {self.selected_target_id} lost > {self.TIMEOUT}s; clearing.")
+                    self.selected_target_id = None
+                    self.selected_box = None
+                    selected_lost_since = None
+                    self.system_state.set_state("scanning")
+            else:
+                selected_lost_since = None  # target reacquired
 
             # ROI dwell confirmation: must remain in ROI for ROI_DWELL seconds before fire.
             if self.in_roi:
