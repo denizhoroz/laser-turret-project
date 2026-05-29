@@ -8,11 +8,39 @@ from __future__ import annotations
 
 import os
 import threading
+import time
 
 from packages.link import Link
 from packages.state import SystemState
 from packages.config import ARDUINO_BAUDRATE, ARDUINO_PORT
 from packages.serial import ArduLink
+
+
+def arduino_reader_loop(arduino: ArduLink, link: Link) -> None:
+    """Drain Arduino → forward selected frames to ground station.
+
+    Currently forwards type=="telemetry" so GS broadcasts to WS clients.
+    Other inbound (acks, status, events) printed for debug.
+    """
+    while True:
+        try:
+            msg = arduino.receive()
+        except Exception as e:
+            print(f"[arduino reader] error: {e}")
+            time.sleep(0.2)
+            continue
+        if not msg:
+            time.sleep(0.02)
+            continue
+        mtype = msg.get("type")
+        if mtype == "telemetry":
+            try:
+                link.send(msg)
+            except Exception as e:
+                print(f"[arduino reader] link.send failed: {e}")
+        else:
+            # Unhandled Arduino frame — leave for log only.
+            pass
 
 
 MISSION_MAP = {
@@ -38,6 +66,11 @@ def main():
     system_state = SystemState(link=link, arduino=arduino)
     link.send({"type": "hello", "node": "jetson"})
     link.send({"type": "state", "state": system_state.system_state})
+
+    # Background pump: Arduino → ground station telemetry.
+    threading.Thread(
+        target=arduino_reader_loop, args=(arduino, link), daemon=True
+    ).start()
 
     mission_thread: threading.Thread | None = None
 

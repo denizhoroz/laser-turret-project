@@ -19,15 +19,16 @@ export function renderTelemetry(t) {
     });
   }
 
-  if (t.temp != null) els.temp.textContent = `${t.temp} °C`;
   if (t.yaw_dir   !== undefined) els.yaw.textContent   = dirArrow(t.yaw_dir);
   if (t.pitch_dir !== undefined) els.pitch.textContent = dirArrow(t.pitch_dir);
 
   if (t.laser !== undefined) {
     const on = !!t.laser;
-    els.laserDot.className = `w-2 h-2 ${on ? 'bg-lime-400' : 'bg-zinc-700'}`;
-    els.laserText.textContent = on ? 'Active' : 'Inactive';
+    els.laserDot.className = `w-2 h-2 mt-1 ${on ? 'bg-lime-400' : 'bg-zinc-700'}`;
   }
 
-  if (t.status) setStatus(t.status);
+  if (t.status) {
+    setStatus(t.status);
+    if (els.state) els.state.textContent = t.status;
+  }
 }
