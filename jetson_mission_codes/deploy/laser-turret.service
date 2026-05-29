@@ -1,0 +1,22 @@
+[Unit]
+Description=Laser turret jetson mission supervisor
+After=network-online.target l4t-usb-device-mode.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jetson
+Group=jetson
+WorkingDirectory=/home/jetson/laser-turret/jetson_mission_codes/src
+EnvironmentFile=/home/jetson/laser-turret/jetson_mission_codes/.env
+ExecStart=/home/jetson/laser-turret/jetson_mission_codes/venv/bin/python -u main.py
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+# Give python access to v4l2 / serial devices via group membership; do not
+# escalate any further than needed.
+SupplementaryGroups=dialout video
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,10 @@
+# Jetson Nano runtime deps. Install in venv:
+#   python3 -m venv venv && source venv/bin/activate
+#   pip install -r requirements-jetson.txt
+#
+# IMPORTANT: do NOT install torch from PyPI on Jetson Nano. Use NVIDIA's
+# prebuilt wheel matching your JetPack/L4T version. See deploy/README.md.
+pyserial
+numpy
+opencv-python
+ultralytics

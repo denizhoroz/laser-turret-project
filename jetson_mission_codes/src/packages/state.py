@@ -33,7 +33,10 @@ class SystemState:
             return
         self.system_state = new_state
         if self.link:
-            self.link.send({"type": "state", "state": new_state})
+            try:
+                self.link.send({"type": "state", "state": new_state})
+            except Exception as e:
+                print(f"[link send error] {e}")
         # Notify the Arduino so it can drive scanning vs. tracking behavior.
         # Additive — rides the existing data channel, does not touch the
         # current_target_offset wire format.
@@ -50,7 +53,10 @@ class SystemState:
             raise ValueError(f"Invalid mission: {new_mission}. Valid missions are: {valid_missions}")
         self.system_mission = new_mission
         if self.link:
-            self.link.send({"type": "mission", "mission": new_mission})
+            try:
+                self.link.send({"type": "mission", "mission": new_mission})
+            except Exception as e:
+                print(f"[link send error] {e}")
 
     def send_data(self, key: str, value):
         """Sends data to the system.
@@ -62,7 +68,10 @@ class SystemState:
         """
         self.system_data[key] = value
         if self.link:
-            self.link.send({"type": "data", "key": key, "value": value})
+            try:
+                self.link.send({"type": "data", "key": key, "value": value})
+            except Exception as e:
+                print(f"[link send error] {e}")
         if self.Arduino:
             if key == "current_target_offset":
                 now = time.time()
@@ -103,16 +112,21 @@ class SystemState:
                 "name": getattr(b, "class_name", None),
                 "conf": float(b.confidence) if b.confidence is not None else None,
             })
-        self.link.send({
-            "type": "frame",
-            "w": int(w),
-            "h": int(h),
-            "jpeg": base64.b64encode(buf.tobytes()).decode("ascii"),
-            "boxes": box_data,
-        })
+        try:
+            self.link.send({
+                "type": "frame",
+                "w": int(w),
+                "h": int(h),
+                "jpeg": base64.b64encode(buf.tobytes()).decode("ascii"),
+                "boxes": box_data,
+            })
+        except Exception as e:
+            print(f"[link send frame error] {e}")
 
     def start_mission(self, mission: str):
-        """Starts a specific mission and updates the system state accordingly."""
+        """Starts a specific mission and updates the system state accordingly.
+        Catches any mission-level exception so a crash inside a mission cannot
+        kill the supervisor process."""
 
         if self.system_mission != "none":
             print(f"Cannot start mission {mission} because mission {self.system_mission} is already active.")
@@ -129,6 +143,10 @@ class SystemState:
                 TestDetect(self).start()
             else:
                 self.set_state("idle")
+        except Exception as e:
+            import traceback
+            print(f"[mission {mission} crashed] {e}")
+            traceback.print_exc()
         finally:
             self.set_mission("none")
             self.set_state("idle")

@@ -72,7 +72,10 @@ class WSManager:
 
 ws_manager = WSManager()
 jetson_link = JetsonLink(
-    host=os.environ.get("JETSON_LINK_HOST", "127.0.0.1"),
+    # Default 0.0.0.0 so the listener also accepts the Jetson coming in over the
+    # USB-gadget RNDIS interface (192.168.55.0/24). Override JETSON_LINK_HOST to
+    # 127.0.0.1 for loopback-only dev workflow.
+    host=os.environ.get("JETSON_LINK_HOST", "0.0.0.0"),
     port=int(os.environ.get("JETSON_LINK_PORT", "9001")),
 )
 

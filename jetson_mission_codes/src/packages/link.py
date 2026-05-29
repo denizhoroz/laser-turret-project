@@ -1,7 +1,7 @@
 """Transport link to ground station.
 
-Dev: TCP client to localhost:9001 (line-delimited JSON).
-Prod (Jetson): swap to pyserial USB CDC-ACM with same line-JSON framing.
+TCP client to GS (line-delimited JSON over the Jetson Nano USB-gadget
+network: jetson 192.168.55.1, laptop 192.168.55.100).
 """
 from __future__ import annotations
 
@@ -20,11 +20,14 @@ class Link:
         self.rx_queue: Queue = Queue()
         self._tx_lock = threading.Lock()
         self._stop = False
+        # True between successful connect and reader exit / send failure.
+        # Supervisor loop polls this to decide whether to recycle the session.
+        self.connected: bool = False
 
     def connect(self, retry: bool = True) -> None:
         while not self._stop:
             try:
-                self.sock = socket.create_connection((self.host, self.port))
+                self.sock = socket.create_connection((self.host, self.port), timeout=5)
                 self.sock.settimeout(None)
                 break
             except OSError as e:
@@ -32,6 +35,7 @@ class Link:
                     raise
                 print(f"[link] connect failed ({e}), retrying in 2s...")
                 time.sleep(2)
+        self.connected = True
         threading.Thread(target=self._reader, daemon=True).start()
 
     def _reader(self) -> None:
@@ -53,10 +57,11 @@ class Link:
                     self.rx_queue.put(json.loads(line.decode()))
                 except (json.JSONDecodeError, UnicodeDecodeError):
                     continue
-        print("[link] reader stopped")
+        self.connected = False
+        print("[link] reader stopped (disconnected)")
 
     def send(self, msg: dict) -> None:
-        if self.sock is None:
+        if self.sock is None or not self.connected:
             return
         data = (json.dumps(msg) + "\n").encode()
         with self._tx_lock:
@@ -64,6 +69,7 @@ class Link:
                 self.sock.sendall(data)
             except OSError as e:
                 print(f"[link] send failed: {e}")
+                self.connected = False
 
     def recv(self, timeout: float | None = None) -> dict | None:
         try:
@@ -73,8 +79,10 @@ class Link:
 
     def close(self) -> None:
         self._stop = True
+        self.connected = False
         if self.sock:
             try:
                 self.sock.close()
             except OSError:
                 pass
+        self.sock = None

@@ -1,3 +1,5 @@
+import os
+import platform
 from pathlib import Path
 
 
@@ -45,5 +47,8 @@ TCAREA_RATIO: float = 0.6        # TCArea side as fraction of bbox side
 #   laser hits ABOVE target → lower (negative is fine — laser sits above cam).
 PARALLAX_BIAS_Y_PX: int = 50
 
-ARDUINO_PORT: str = "COM8"
-ARDUINO_BAUDRATE: int = 115200
+# Arduino USB serial device. Env var ARDUINO_PORT wins; otherwise pick a
+# platform-appropriate default (Windows: COMx, Linux/Jetson: /dev/ttyACM0).
+_default_arduino_port = "COM8" if platform.system() == "Windows" else "/dev/ttyACM0"
+ARDUINO_PORT: str = os.environ.get("ARDUINO_PORT", _default_arduino_port)
+ARDUINO_BAUDRATE: int = int(os.environ.get("ARDUINO_BAUDRATE", "115200"))
