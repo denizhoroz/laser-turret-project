@@ -43,9 +43,6 @@
 #include "limit_recovery.h"
 #include "scanning.h"
 #include "PID.h"
-#include "serial_link.h"   // sendTelemetry
-
-static const unsigned long TELEMETRY_INTERVAL_MS = 200;
 
 void setup() {
   Serial.begin(BAUD);
@@ -99,12 +96,5 @@ void loop() {
   if (now - lastLedTick > 100) {
     lastLedTick = now;
     updateLeds();
-  }
-
-  // Periodic telemetry to Jetson (forwarded to ground station UI).
-  static unsigned long lastTelemTick = 0;
-  if (now - lastTelemTick >= TELEMETRY_INTERVAL_MS) {
-    lastTelemTick = now;
-    sendTelemetry();
   }
 }

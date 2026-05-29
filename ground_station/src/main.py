@@ -96,8 +96,6 @@ async def on_jetson_message(msg: dict) -> None:
         await ws_manager.broadcast({"type": "log", "text": f"Jetson mission -> {msg.get('mission')}"})
     elif mtype == "data":
         await ws_manager.broadcast({"type": "jetson_data", "key": msg.get("key"), "value": msg.get("value")})
-    elif mtype == "telemetry":
-        await ws_manager.broadcast({"type": "telemetry", "data": msg.get("data") or {}})
     elif mtype == "frame":
         await ws_manager.broadcast({
             "type": "frame",

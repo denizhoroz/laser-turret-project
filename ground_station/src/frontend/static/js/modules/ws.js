@@ -3,7 +3,6 @@
 
 import { logLine } from './log.js';
 import { setConnected } from './connection.js';
-import { renderTelemetry } from './telemetry.js';
 import { setDetections } from './overlay.js';
 import { setStarted, setMissionConnection } from './mission.js';
 import { els } from './dom.js';
@@ -36,9 +35,6 @@ function handleMessage(msg) {
       setMissionConnection(!!msg.connected);
       logLine(msg.connected ? 'ok' : 'warn', `Jetson ${msg.connected ? 'connected' : 'disconnected'}`);
       break;
-    case 'telemetry':
-      renderTelemetry(msg.data || msg);
-      break;
     case 'detections':
       setDetections(msg.data || [], msg.frame_w, msg.frame_h);
       break;
@@ -50,7 +46,6 @@ function handleMessage(msg) {
       logLine('jetson', msg.text || '');
       break;
     default:
-      if (msg.telemetry)  renderTelemetry(msg.telemetry);
       if (msg.detections) setDetections(msg.detections);
   }
 }
