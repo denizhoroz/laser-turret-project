@@ -2,7 +2,7 @@
 // Dispatches typed messages to handlers passed in.
 
 import { logLine } from './log.js';
-import { setConnected } from './connection.js';
+import { setConnected, setStatus } from './connection.js';
 import { setDetections } from './overlay.js';
 import { setStarted, setMissionConnection } from './mission.js';
 import { els } from './dom.js';
@@ -35,6 +35,11 @@ function handleMessage(msg) {
       setMissionConnection(!!msg.connected);
       logLine(msg.connected ? 'ok' : 'warn', `Jetson ${msg.connected ? 'connected' : 'disconnected'}`);
       break;
+    case 'telemetry': {
+      const data = msg.data || msg;
+      if (data && data.status) setStatus(data.status);
+      break;
+    }
     case 'detections':
       setDetections(msg.data || [], msg.frame_w, msg.frame_h);
       break;
