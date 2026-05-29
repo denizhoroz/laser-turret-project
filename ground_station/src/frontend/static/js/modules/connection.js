@@ -3,10 +3,10 @@
 import { els } from './dom.js';
 
 const STATUS_STYLE = {
-  Online:    'border-zinc-700 bg-zinc-900 text-zinc-200',
-  Scanning:  'border-lime-400/30 bg-lime-400/5 text-lime-300',
-  Targeting: 'border-lime-400/50 bg-lime-400/10 text-lime-300',
-  Firing:    'border-lime-400 bg-lime-400/20 text-lime-200',
+  Idle:      'border-zinc-700 bg-zinc-900 text-zinc-300',
+  Scanning:  'border-lime-400/50 bg-lime-400/10 text-lime-300',
+  Tracking:  'border-yellow-400/50 bg-yellow-400/10 text-yellow-300',
+  Firing:    'border-red-500/60 bg-red-500/15 text-red-300',
   Offline:   'border-zinc-800 bg-zinc-950 text-zinc-500',
 };
 
