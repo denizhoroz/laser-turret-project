@@ -6,7 +6,7 @@ import ultralytics
 
 # Parameters
 from packages import tracker
-from packages.config import DEVICE, CAMERA
+from packages.config import DEVICE, CAMERA, WINDOW_SIZE
 
 # Min seconds between camera-reopen attempts when the device is down.
 # Hammering VideoCapture() too fast on Windows MSMF can hang for several
@@ -55,7 +55,17 @@ class Detector:
         """Opens the video capture for the specified camera index."""
         self.cap = cv.VideoCapture(self.camera)
         assert self.cap.isOpened(), f"cannot open camera index {self.camera}"
+        self._apply_capture_size(self.cap)
         self._camera_down = False
+
+    def _apply_capture_size(self, cap):
+        w, h = WINDOW_SIZE
+        cap.set(cv.CAP_PROP_FRAME_WIDTH, int(w))
+        cap.set(cv.CAP_PROP_FRAME_HEIGHT, int(h))
+        actual_w = int(cap.get(cv.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(cap.get(cv.CAP_PROP_FRAME_HEIGHT))
+        if (actual_w, actual_h) != (int(w), int(h)):
+            print(f"warning: requested {w}x{h}, camera delivers {actual_w}x{actual_h}")
 
     def close_camera(self):
         """Releases the video capture resource."""
@@ -76,6 +86,7 @@ class Detector:
             pass
         cap = cv.VideoCapture(self.camera)
         if cap.isOpened():
+            self._apply_capture_size(cap)
             self.cap = cap
             self._camera_down = False
             print("camera reconnected")

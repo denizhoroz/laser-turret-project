@@ -1,9 +1,10 @@
+import glob
 import os
 import platform
 from pathlib import Path
 
 
-WINDOW_SIZE: tuple[int, int] = (640, 480)
+WINDOW_SIZE: tuple[int, int] = (800, 600)
 BASE_DIR: Path = Path(__file__).resolve().parent
 MODELS_DIR: Path = BASE_DIR / "models"
 MISSION1_WEIGHTS: Path = MODELS_DIR / "model-target1" / "best.pt"
@@ -45,10 +46,17 @@ TCAREA_RATIO: float = 0.6        # TCArea side as fraction of bbox side
 # Tune by firing at a target at typical engagement distance:
 #   laser hits BELOW target → raise the value.
 #   laser hits ABOVE target → lower (negative is fine — laser sits above cam).
-PARALLAX_BIAS_Y_PX: int = 50
+PARALLAX_BIAS_Y_PX: int = 60
 
 # Arduino USB serial device. Env var ARDUINO_PORT wins; otherwise pick a
-# platform-appropriate default (Windows: COMx, Linux/Jetson: /dev/ttyACM0).
-_default_arduino_port = "COM8" if platform.system() == "Windows" else "/dev/ttyACM0"
-ARDUINO_PORT: str = os.environ.get("ARDUINO_PORT", _default_arduino_port)
+# platform-appropriate default (Windows: COMx, Linux/Jetson: probe ttyUSB* then ttyACM*).
+def _detect_arduino_port() -> str:
+    if platform.system() == "Windows":
+        return "COM8"
+    for pattern in ("/dev/ttyUSB0", "/dev/ttyUSB1", "/dev/ttyACM0", "/dev/ttyACM1"):
+        if glob.glob(pattern):
+            return pattern
+    return "/dev/ttyUSB0"
+
+ARDUINO_PORT: str = os.environ.get("ARDUINO_PORT", _detect_arduino_port())
 ARDUINO_BAUDRATE: int = int(os.environ.get("ARDUINO_BAUDRATE", "115200"))

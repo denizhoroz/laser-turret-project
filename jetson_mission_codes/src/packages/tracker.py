@@ -1,4 +1,4 @@
-from packages.config import TCAREA_RATIO, PARALLAX_BIAS_Y_PX
+from packages.config import TCAREA_RATIO, PARALLAX_BIAS_Y_PX, WINDOW_SIZE
 
 
 class Rectangle:
@@ -15,7 +15,7 @@ class Rectangle:
 class Tracker:
     """Tracker for measuring the position of the target in the frame and calculating the necessary angles for the turret to aim at the target."""
 
-    def __init__(self, window_size: tuple = (640, 480), tcarea_ratio: float = TCAREA_RATIO):
+    def __init__(self, window_size: tuple = WINDOW_SIZE, tcarea_ratio: float = TCAREA_RATIO):
         """tcarea_ratio: side length of TCArea as fraction of bbox side."""
         self.window_size = window_size
         self.center = (self.window_size[0] // 2, self.window_size[1] // 2)
