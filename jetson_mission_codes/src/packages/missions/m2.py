@@ -24,8 +24,12 @@ from packages.config import (
     MISSION2_WEIGHTS,
     TARGET_LOSS_TIMEOUT,
     TARGET_CONFIRM_FRAMES,
+    TARGET_FIRING_DURATION,
     CANDIDATE_MISS_TOLERANCE,
     LOSS_REACQUIRE_FRAMES,
+    STUCK_NO_ROI_TIMEOUT,
+    STUCK_AIMING_TIMEOUT,
+    FAILSAFE_COOLDOWN,
 )
 from packages.detector import Detector
 from packages.tracker import Tracker
@@ -43,16 +47,23 @@ class Mission2:
         self.TIMEOUT: float = TARGET_LOSS_TIMEOUT
 
     @staticmethod
-    def _pick_target(boxes):
+    def _pick_target(boxes, now: float, blacklist: dict[str, float]):
         """Return the box to track this frame.
 
         Preference: ``target`` class first; ``truck`` only if no target is
-        visible. Returns ``None`` if neither class is present.
+        visible. Returns ``None`` if neither class is present. Classes in
+        ``blacklist`` with an unexpired cooldown are skipped (expired entries
+        are pruned in place).
         """
         target_box = None
         truck_box = None
         for box in boxes:
             name = (box.class_name or "").lower()
+            exp = blacklist.get(name)
+            if exp is not None:
+                if exp > now:
+                    continue
+                del blacklist[name]
             if name == "target" and target_box is None:
                 target_box = box
             elif name == "truck" and truck_box is None:
@@ -70,6 +81,12 @@ class Mission2:
         confirm_streak = 0                   # frames a target has been picked during confirmation
         confirm_misses = 0                   # consecutive miss frames during confirmation
         reacq_streak = 0                     # consecutive picks during loss-grace (gates lost_since reset)
+        # Failsafe state
+        tracking_started_at: float | None = None  # when this lock became active
+        roi_first_seen_at: float | None = None    # first time in_roi went True during this lock
+        last_picked_name: str | None = None       # class name of most recent picked target (for blacklist)
+        failsafe_blacklist: dict[str, float] = {}  # class name -> cooldown expiry ts
+        failsafe_fire_until: float = 0.0          # when forced-fire window ends (0 = inactive)
 
         self.system_state.set_state("scanning")
 
@@ -84,7 +101,31 @@ class Mission2:
             frame, boxes = res
             now = time.time()
 
-            picked = self._pick_target(boxes) if boxes else None
+            # ---------- Forced-fire window (failsafe-2) ----------
+            # While active, keep streaming frames and is_firing=True. When the
+            # window closes, drop firing, blacklist the class, reset tracking.
+            if failsafe_fire_until > 0.0:
+                if now >= failsafe_fire_until:
+                    if firing:
+                        firing = False
+                        self.system_state.send_data("is_firing", False)
+                    if last_picked_name:
+                        failsafe_blacklist[last_picked_name] = now + FAILSAFE_COOLDOWN
+                    failsafe_fire_until = 0.0
+                    tracking_active = False
+                    tracking_started_at = None
+                    roi_first_seen_at = None
+                    lost_since = None
+                    confirm_streak = 0
+                    confirm_misses = 0
+                    reacq_streak = 0
+                    self.system_state.set_state("scanning")
+                self.system_state.send_frame(frame, boxes)
+                continue
+
+            picked = self._pick_target(boxes, now, failsafe_blacklist) if boxes else None
+            if picked is not None and picked.class_name:
+                last_picked_name = picked.class_name.lower()
 
             # Confirmation streak (only relevant while not yet tracking). A target
             # must be picked for TARGET_CONFIRM_FRAMES frames before we leave
@@ -106,6 +147,8 @@ class Mission2:
                 confirm_streak = 0
                 confirm_misses = 0
                 reacq_streak = 0
+                tracking_started_at = now
+                roi_first_seen_at = None
                 print("[m2] target confirmed; tracking active")
 
             if tracking_active and picked is not None:
@@ -132,6 +175,10 @@ class Mission2:
                 # CONTINUOUS tracking — send offset every frame, even in ROI.
                 # This is the key behavioral difference from Mission 1.
                 self.system_state.send_data("current_target_offset", self.offset)
+
+                # Anchor failsafe-2 timer on first ROI entry for this lock.
+                if self.in_roi and roi_first_seen_at is None:
+                    roi_first_seen_at = now
 
                 # Laser follows ROI state directly. Edge-triggered sends so we
                 # don't spam Arduino with redundant is_firing messages.
@@ -173,11 +220,43 @@ class Mission2:
                         tracking_active = False
                         confirm_streak = 0
                         confirm_misses = 0
+                        tracking_started_at = None
+                        roi_first_seen_at = None
                         print(f"[m2] loss confirmed (>{self.TIMEOUT}s); resuming scan")
                         self.system_state.set_state("scanning")
                 else:
                     # Still scanning (confirming or nothing seen).
                     self.system_state.set_state("scanning")
+
+            # ---------- Failsafes ----------
+            # Failsafe 1: locked but crosshair never reaches ROI → false positive
+            # heuristic. Drop lock, blacklist the class briefly, return to scan.
+            # Failsafe 2: ROI seen but no sustained fire due to flicker → start
+            # a forced-fire window (handled at top of loop next iteration).
+            if tracking_active and tracking_started_at is not None and failsafe_fire_until == 0.0:
+                if roi_first_seen_at is None and (now - tracking_started_at) >= STUCK_NO_ROI_TIMEOUT:
+                    bl_name = last_picked_name or ""
+                    if bl_name:
+                        failsafe_blacklist[bl_name] = now + FAILSAFE_COOLDOWN
+                    print(f"[m2] FAILSAFE-1: stuck >{STUCK_NO_ROI_TIMEOUT}s w/o ROI on '{bl_name}' — blacklisting & scanning")
+                    if firing:
+                        firing = False
+                        self.system_state.send_data("is_firing", False)
+                    tracking_active = False
+                    tracking_started_at = None
+                    roi_first_seen_at = None
+                    lost_since = None
+                    confirm_streak = 0
+                    confirm_misses = 0
+                    reacq_streak = 0
+                    self.system_state.set_state("scanning")
+                elif roi_first_seen_at is not None and (now - roi_first_seen_at) >= STUCK_AIMING_TIMEOUT:
+                    print(f"[m2] FAILSAFE-2: aimed >{STUCK_AIMING_TIMEOUT}s w/ flicker — forcing fire for {TARGET_FIRING_DURATION}s")
+                    if not firing:
+                        firing = True
+                        self.system_state.send_data("is_firing", True)
+                    self.system_state.set_state("firing")
+                    failsafe_fire_until = now + TARGET_FIRING_DURATION
 
             self.system_state.send_frame(frame, boxes)
 

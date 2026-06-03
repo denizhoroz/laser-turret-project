@@ -10,6 +10,9 @@ from packages.config import (
     MISSION1_WEIGHTS,
     TARGET_CONFIRM_FRAMES,
     CANDIDATE_MISS_TOLERANCE,
+    STUCK_NO_ROI_TIMEOUT,
+    STUCK_AIMING_TIMEOUT,
+    FAILSAFE_COOLDOWN,
 )
 
 from packages.detector import Detector
@@ -46,6 +49,10 @@ class Mission1:
         candidate_id: float | None = None          # class id being confirmed before selection
         candidate_streak = 0                        # frames the candidate has been seen
         candidate_misses = 0                        # consecutive frames the candidate was NOT seen
+        # Failsafe state
+        tracking_started_at: float | None = None   # set when selected_target_id is committed
+        roi_first_seen_at: float | None = None     # first time in_roi went True for current lock
+        failsafe_blacklist: dict[float, float] = {}  # class_id -> cooldown expiry ts
 
         self.system_state.set_state("scanning")
         while not self.system_state.stop_requested:
@@ -77,6 +84,8 @@ class Mission1:
                     in_roi_since = None
                     self.selected_target_id = None
                     self.selected_box = None
+                    tracking_started_at = None
+                    roi_first_seen_at = None
                     self.system_state.send_data("is_firing", False)
 
                     # Mission complete when every required target id has been
@@ -100,12 +109,20 @@ class Mission1:
             # Brief detection drops are absorbed by CANDIDATE_MISS_TOLERANCE.
             # Runs whether or not boxes is empty — empty frames count as misses.
             if self.selected_target_id is None:
+                # Drop expired blacklist entries.
+                expired = [tid for tid, exp in failsafe_blacklist.items() if exp <= now]
+                for tid in expired:
+                    del failsafe_blacklist[tid]
+
+                def _eligible(tid: float) -> bool:
+                    return (tid not in self.target_pool) and (tid not in failsafe_blacklist)
+
                 # Is the current candidate visible this frame (and still eligible)?
                 candidate_present = False
                 if candidate_id is not None:
                     for box in boxes:
                         tid = box.class_id if box.class_id is not None else -1
-                        if tid == candidate_id and tid not in self.target_pool:
+                        if tid == candidate_id and _eligible(tid):
                             candidate_present = True
                             break
 
@@ -123,7 +140,7 @@ class Mission1:
                     if candidate_id is None:
                         for box in boxes:
                             tid = box.class_id if box.class_id is not None else -1
-                            if tid not in self.target_pool:
+                            if _eligible(tid):
                                 candidate_id = tid
                                 candidate_streak = 1
                                 candidate_misses = 0
@@ -132,6 +149,8 @@ class Mission1:
                 if candidate_id is not None and candidate_streak >= TARGET_CONFIRM_FRAMES:
                     self.selected_target_id = candidate_id
                     self.system_state.set_state("tracking")
+                    tracking_started_at = now
+                    roi_first_seen_at = None
                     print(f"Selected target ID: {self.selected_target_id} for tracking (confirmed).")
                     candidate_id = None
                     candidate_streak = 0
@@ -167,9 +186,44 @@ class Mission1:
                     self.selected_target_id = None
                     self.selected_box = None
                     selected_lost_since = None
+                    tracking_started_at = None
+                    roi_first_seen_at = None
                     self.system_state.set_state("scanning")
             else:
                 selected_lost_since = None  # target reacquired
+
+            # Record the first frame this lock entered ROI — anchor for failsafe-2.
+            if self.in_roi and roi_first_seen_at is None:
+                roi_first_seen_at = now
+
+            # ---------- Failsafes ----------
+            # Only consider failsafes while a target is committed and we are NOT
+            # already in the firing window (firing branch handles cleanup itself).
+            if self.selected_target_id is not None and tracking_started_at is not None and not firing:
+                # Failsafe 1: locked but never reached ROI → false positive heuristic.
+                if roi_first_seen_at is None and (now - tracking_started_at) >= STUCK_NO_ROI_TIMEOUT:
+                    print(f"[m1] FAILSAFE-1: id={self.selected_target_id} stuck >{STUCK_NO_ROI_TIMEOUT}s w/o ROI — blacklisting & scanning")
+                    failsafe_blacklist[self.selected_target_id] = now + FAILSAFE_COOLDOWN
+                    self.selected_target_id = None
+                    self.selected_box = None
+                    selected_lost_since = None
+                    tracking_started_at = None
+                    roi_first_seen_at = None
+                    in_roi_since = None
+                    self.in_roi = False
+                    self.offset = (0, 0)
+                    self.system_state.set_state("scanning")
+                    self.system_state.send_frame(frame, boxes)
+                    continue
+                # Failsafe 2: reached ROI but dwell never completed due to flicker → force fire.
+                if roi_first_seen_at is not None and (now - roi_first_seen_at) >= STUCK_AIMING_TIMEOUT:
+                    print(f"[m1] FAILSAFE-2: id={self.selected_target_id} aimed >{STUCK_AIMING_TIMEOUT}s w/o fire — forcing fire")
+                    firing = True
+                    fire_until = now + self.FIRING_DURATION
+                    self.system_state.set_state("firing")
+                    self.system_state.send_data("is_firing", True)
+                    self.system_state.send_frame(frame, boxes)
+                    continue
 
             # ROI dwell confirmation: must remain in ROI for ROI_DWELL seconds before fire.
             if self.in_roi:

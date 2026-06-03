@@ -48,6 +48,20 @@ TCAREA_RATIO: float = 0.6        # TCArea side as fraction of bbox side
 #   laser hits ABOVE target → lower (negative is fine — laser sits above cam).
 PARALLAX_BIAS_Y_PX: int = 60
 
+# --- Failsafes for stuck-tracking conditions ---
+# (1) STUCK_NO_ROI_TIMEOUT: target locked but the crosshair never reaches its
+#     ROI within this many seconds → treat as false positive (e.g. sky/edge
+#     ghost), abandon, briefly blacklist the class, resume scan.
+# (2) STUCK_AIMING_TIMEOUT: ROI was reached at least once during this lock,
+#     but fire never completes within this many seconds (bbox flicker breaks
+#     m1 dwell / rapid in-out toggling in m2) → force fire for
+#     TARGET_FIRING_DURATION then return to scanning.
+STUCK_NO_ROI_TIMEOUT: float = 5.0
+STUCK_AIMING_TIMEOUT: float = 4.0
+# After a failsafe abandons a class, ignore it for this many seconds so the
+# head can sweep off the ghost before the same class becomes re-eligible.
+FAILSAFE_COOLDOWN: float = 10.0
+
 # Arduino USB serial device. Env var ARDUINO_PORT wins; otherwise pick a
 # platform-appropriate default (Windows: COMx, Linux/Jetson: probe ttyUSB* then ttyACM*).
 def _detect_arduino_port() -> str:
