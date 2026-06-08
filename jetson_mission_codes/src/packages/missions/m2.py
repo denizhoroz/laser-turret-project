@@ -101,27 +101,31 @@ class Mission2:
             frame, boxes = res
             now = time.time()
 
-            # ---------- Forced-fire window (failsafe-2) ----------
-            # While active, keep streaming frames and is_firing=True. When the
-            # window closes, drop firing, blacklist the class, reset tracking.
-            if failsafe_fire_until > 0.0:
-                if now >= failsafe_fire_until:
-                    if firing:
-                        firing = False
-                        self.system_state.send_data("is_firing", False)
-                    if last_picked_name:
-                        failsafe_blacklist[last_picked_name] = now + FAILSAFE_COOLDOWN
-                    failsafe_fire_until = 0.0
-                    tracking_active = False
-                    tracking_started_at = None
-                    roi_first_seen_at = None
-                    lost_since = None
-                    confirm_streak = 0
-                    confirm_misses = 0
-                    reacq_streak = 0
-                    self.system_state.set_state("scanning")
+            # ---------- Forced-fire window expiry (failsafe-2 cleanup) ----------
+            # When the window closes: drop firing, blacklist the class, drop
+            # tracking, scan. During the window, normal tracking logic still
+            # runs so the motors keep following the moving target — only the
+            # in_roi-gated firing decision is overridden (see below).
+            if failsafe_fire_until > 0.0 and now >= failsafe_fire_until:
+                if firing:
+                    firing = False
+                    self.system_state.send_data("is_firing", False)
+                if last_picked_name:
+                    failsafe_blacklist[last_picked_name] = now + FAILSAFE_COOLDOWN
+                print(f"[m2] FAILSAFE-2 window ended; blacklisting '{last_picked_name}' & scanning")
+                failsafe_fire_until = 0.0
+                tracking_active = False
+                tracking_started_at = None
+                roi_first_seen_at = None
+                lost_since = None
+                confirm_streak = 0
+                confirm_misses = 0
+                reacq_streak = 0
+                self.system_state.set_state("scanning")
                 self.system_state.send_frame(frame, boxes)
                 continue
+
+            in_failsafe_fire = failsafe_fire_until > 0.0
 
             picked = self._pick_target(boxes, now, failsafe_blacklist) if boxes else None
             if picked is not None and picked.class_name:
@@ -180,9 +184,15 @@ class Mission2:
                 if self.in_roi and roi_first_seen_at is None:
                     roi_first_seen_at = now
 
-                # Laser follows ROI state directly. Edge-triggered sends so we
-                # don't spam Arduino with redundant is_firing messages.
-                if self.in_roi and not firing:
+                # Failsafe-2 forced fire overrides in_roi gating: motors keep
+                # tracking (offsets sent above), laser stays on until window
+                # ends. Otherwise normal in_roi-driven firing.
+                if in_failsafe_fire:
+                    if not firing:
+                        firing = True
+                        self.system_state.send_data("is_firing", True)
+                    self.system_state.set_state("firing")
+                elif self.in_roi and not firing:
                     firing = True
                     self.system_state.send_data("is_firing", True)
                     self.system_state.set_state("firing")
@@ -202,6 +212,12 @@ class Mission2:
                 # target missing this frame.
                 self.offset = (0, 0)
                 self.in_roi = False
+
+                # Target lost mid forced-fire — kill window now so the next
+                # iteration's expiry-cleanup branch fires and blacklists.
+                if in_failsafe_fire:
+                    failsafe_fire_until = now
+                    print("[m2] FAILSAFE-2 cut short — target lost mid-fire")
 
                 # Drop laser immediately on target loss.
                 if firing:
