@@ -147,9 +147,13 @@ class Detector:
                                   class_id=cid,
                                   confidence=confs[idx] if idx < len(confs) else None,
                                   class_name=cname)
-                existing = best_per_class.get(cid)
+                # Key by class_name when available so distinct class ids
+                # mapped to the same display name (e.g. two "truck" ids in
+                # the m2 model) collapse to one box per visible class.
+                key = cname if cname is not None else cid
+                existing = best_per_class.get(key)
                 if existing is None or (box.confidence or 0) > (existing.confidence or 0):
-                    best_per_class[cid] = box
+                    best_per_class[key] = box
 
         boxes = list(best_per_class.values())
         return frame, boxes
