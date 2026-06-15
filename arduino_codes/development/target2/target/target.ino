@@ -1,33 +1,3 @@
-// ============================================================================
-// Adaptive laser-hit detector — RC-car photoresistor array (standalone UNO)
-//
-// One aggregate analog signal (A2) from many LDRs on a pertinax coating.
-// Red LED (A1) is ON while a laser strikes the coating; Green LED (A0) = powered.
-//
-// DETECTION PRINCIPLE — jump RATE, not level or amplitude.
-// Ground-truth captures showed the laser-hit signal is erratic: the reading makes
-// large excursions (tens to >100 counts) that may be a dense oscillation OR sparse
-// intermittent spikes, with the DC level wandering the whole time. What is ALWAYS
-// true and is absent otherwise: many large sample-to-sample JUMPS clustered in
-// time. Quiet ambient makes ~0 jumps; a car reposition makes exactly ONE (a step,
-// then stable); the laser makes SEVERAL. So we count jumps in a sliding window:
-//
-//   d          = |reading - prevReading|           per-sample change
-//   jump       = d > K_JUMP * quietJitter (floored) a "big" change
-//   jumpCount  = jumps within the last WINDOW samples
-//   hit  when  jumpCount >= MIN_JUMPS_ON           (hysteresis to release)
-//
-// This is immune to DC drift and to repositions (1 jump < threshold), works for
-// both dense and intermittent laser profiles, and cannot run away: the quiet floor
-// updates only on calm (non-jump) samples and is frozen while a hit is latched
-// (the failure mode of the level/amplitude versions, where the signal inflated its
-// own threshold).
-//
-// Pin layout (fixed by wiring):
-//   A0 -> Green LED (+)   power indicator
-//   A1 -> Red   LED (+)   hit indicator
-//   A2 -> P-Res signal    aggregate LDR voltage
-// ============================================================================
 
 // --- Pins ---
 constexpr uint8_t PIN_LED_GREEN = A0;
@@ -59,9 +29,8 @@ constexpr unsigned long MAX_HIT_MS = 20000;  // backstop: re-seed if a hit stick
 constexpr bool          DEBUG_PRINT       = true;
 constexpr unsigned long DEBUG_INTERVAL_MS = 200;
 
-// ============================================================================
+
 // State
-// ============================================================================
 enum DetectState : uint8_t { WARMUP, TRACKING };
 
 DetectState state       = WARMUP;
@@ -78,9 +47,8 @@ unsigned long hitStartMs   = 0;
 unsigned long lastSampleMs = 0;
 unsigned long lastDebugMs  = 0;
 
-// ============================================================================
+
 // Helpers
-// ============================================================================
 float oversampleRead() {
   long sum = 0;
   for (uint8_t i = 0; i < OVERSAMPLE; ++i) sum += analogRead(PIN_SIGNAL);
@@ -97,7 +65,6 @@ void enterWarmup() {
   jumpCount = 0;
 }
 
-// Push a jump flag into the sliding window, keeping jumpCount in sync.
 void pushJump(bool isJump) {
   jumpCount -= jumpRing[ringIdx] ? 1 : 0;
   jumpRing[ringIdx] = isJump;
@@ -105,7 +72,6 @@ void pushJump(bool isJump) {
   ringIdx = (ringIdx + 1) % WINDOW_SAMPLES;
 }
 
-// ============================================================================
 void setup() {
   pinMode(PIN_LED_GREEN, OUTPUT);
   pinMode(PIN_LED_RED, OUTPUT);
@@ -121,7 +87,6 @@ void setup() {
   enterWarmup();
 }
 
-// ============================================================================
 void loop() {
   const unsigned long now = millis();
   if (now - lastSampleMs < SAMPLE_INTERVAL_MS) return;
@@ -159,7 +124,7 @@ void loop() {
     }
   }
 
-  // --- Throttled diagnostics ---
+  // diagnostics
   if (DEBUG_PRINT && (now - lastDebugMs >= DEBUG_INTERVAL_MS)) {
     lastDebugMs = now;
     Serial.print(F("state="));
