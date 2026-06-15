@@ -1,4 +1,3 @@
-// Log console: append timestamped lines, cap buffer, clear button.
 
 import { els } from './dom.js';
 

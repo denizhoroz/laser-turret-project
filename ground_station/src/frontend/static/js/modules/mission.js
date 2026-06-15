@@ -1,5 +1,3 @@
-// Mission start/stop button handlers. POST to /api/mission/*.
-// Start/Stop are gated on Jetson connection state — disabled when link is down.
 
 import { els } from './dom.js';
 import { logLine } from './log.js';

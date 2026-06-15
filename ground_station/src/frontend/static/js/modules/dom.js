@@ -1,4 +1,3 @@
-// Centralized DOM element references. Single source of truth for selectors.
 
 export const els = {
   connDot:        document.getElementById('conn-dot'),

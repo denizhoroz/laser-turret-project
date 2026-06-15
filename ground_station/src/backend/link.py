@@ -1,9 +1,5 @@
 """Async link to Jetson.
-
-Dev: TCP server on 127.0.0.1:9001 (line-delimited JSON).
-Prod: swap to pyserial wrapper with same line-JSON framing.
-
-Single-client (only one Jetson). Reconnect supported by replacing the writer.
+Dev: TCP server on 127.0.0.1:9001
 """
 from __future__ import annotations
 

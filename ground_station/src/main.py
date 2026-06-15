@@ -1,8 +1,5 @@
 """FastAPI server for the Turret Ground Station.
 
-Hosts the frontend, exposes mission start/stop endpoints, and bridges to the
-Jetson over a JSON-line link (TCP for dev, swap to pyserial for prod USB).
-
 Run from ground_station/ :
     uvicorn src.main:app --reload --port 8000
 """
@@ -18,9 +15,6 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Set
 
-# Make sibling `backend/` package importable regardless of how this file is
-# launched (uvicorn src.main:app from ground_station/, python src/main.py,
-# or `cd src && uvicorn main:app`). Adds src/ to sys.path if not already on it.
 _SRC_DIR = Path(__file__).resolve().parent
 if str(_SRC_DIR) not in sys.path:
     sys.path.insert(0, str(_SRC_DIR))
@@ -72,18 +66,11 @@ class WSManager:
 
 ws_manager = WSManager()
 jetson_link = JetsonLink(
-    # Default 0.0.0.0 so the listener also accepts the Jetson coming in over the
-    # USB-gadget RNDIS interface (192.168.55.0/24). Override JETSON_LINK_HOST to
-    # 127.0.0.1 for loopback-only dev workflow.
     host=os.environ.get("JETSON_LINK_HOST", "0.0.0.0"),
     port=int(os.environ.get("JETSON_LINK_PORT", "9001")),
 )
 
-# Whether GS believes a mission is currently active on the Jetson. Flipped to
-# True on a successful /api/mission/start, back to False on /api/mission/stop
-# or on Jetson disconnect (mission is implicitly aborted with the link).
 mission_active: bool = False
-
 
 async def on_jetson_message(msg: dict) -> None:
     """Forward Jetson-originated frames to all WS clients."""
@@ -227,7 +214,7 @@ async def ws_telemetry(ws: WebSocket):
     try:
         await ws.send_text(json.dumps({"type": "connection", "connected": jetson_link.connected}))
         while True:
-            await ws.receive_text()  # ignore inbound
+            await ws.receive_text() 
     except WebSocketDisconnect:
         pass
     finally:

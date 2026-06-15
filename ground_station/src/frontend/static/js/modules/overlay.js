@@ -1,4 +1,3 @@
-// Bbox canvas overlay synced with video <img>. DPR-aware, resizes with viewport.
 
 import { els } from './dom.js';
 
@@ -18,7 +17,6 @@ export function setDetections(list, frameW, frameH) {
 }
 
 function computeImageRect() {
-  // Mirrors object-contain: image is centered, scaled to fit while preserving aspect.
   const cw = els.overlay.width;
   const ch = els.overlay.height;
   const srcAspect = sourceW / sourceH;

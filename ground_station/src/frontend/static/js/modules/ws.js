@@ -1,5 +1,4 @@
-// WebSocket client with exponential backoff reconnect.
-// Dispatches typed messages to handlers passed in.
+
 
 import { logLine } from './log.js';
 import { setConnected, setStatus } from './connection.js';
@@ -16,7 +15,6 @@ let backoff = BACKOFF_MIN;
 let lastFrameURL = null;
 
 function paintFrame(b64) {
-  // base64 -> Uint8Array -> Blob -> object URL. Cheaper than data: URLs and frees old refs.
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);

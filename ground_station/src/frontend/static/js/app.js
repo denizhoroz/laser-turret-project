@@ -1,4 +1,3 @@
-// Entry point: wire modules, set initial state, open WS.
 
 import { initLog } from './modules/log.js';
 import { setConnected, setStatus } from './modules/connection.js';

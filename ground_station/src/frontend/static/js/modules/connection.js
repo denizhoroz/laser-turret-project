@@ -1,4 +1,3 @@
-// Connection pill + status pill rendering.
 
 import { els } from './dom.js';
 
