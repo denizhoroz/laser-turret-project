@@ -9,10 +9,9 @@
 void applyOffset(int offsetX, int offsetY) {
   if (halted) return;
 
-  // Parallax compensation is applied Python-side inside Tracker.track().
-  // PID owns deadzone, integral, derivative, and per-tick saturation.
-  long yawDelta   =  pidYaw(offsetX);     // x+ → yaw +
-  long pitchDelta = -pidPitch(offsetY);   // y+ (below crosshair) → pitch −
+  // PID deadzone, integral, derivative, and per-tick saturation.
+  long yawDelta   =  pidYaw(offsetX);     // x+ = yaw +
+  long pitchDelta = -pidPitch(offsetY);   // y+ = pitch −
 
   if (yawDelta != 0) {
     stepDelta(PIN_YAW_STEP, PIN_YAW_DIR, YAW_PULSE_US,

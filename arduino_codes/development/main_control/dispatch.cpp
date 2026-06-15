@@ -14,17 +14,13 @@
 static char rxBuf[SERIAL_LINE_BUF];
 static int  rxLen = 0;
 
-// Latest pending offset from Python. New offsets overwrite older ones — by the
-// time the main loop calls `flushPendingOffset`, only the freshest survives.
-// Prevents stale-offset pile-up when applyOffset() blocks longer than Python's
-// send interval.
+// Latest pending offset from Python.
 static int  pendingOx        = 0;
 static int  pendingOy        = 0;
 static bool hasPendingOffset = false;
 
-// =============================================================================
-// MANUAL SINGLE-CHAR MENU (bench testing only)
-// =============================================================================
+
+// MANUAL SINGLE-CHAR MENU 
 static void printHelp() {
   Serial.println();
   Serial.println(F("=== MAIN CONTROL ==="));
@@ -45,10 +41,7 @@ static void handleMenuChar(char c) {
   }
 }
 
-// =============================================================================
-// PYTHON DATA HANDLERS  ({"type":"data","key":"...","value":...})
-// Silent — Python does not expect acks on this path.
-// =============================================================================
+// PYTHON DATA HANDLERS
 static void handleOffsetData(JsonVariantConst value) {
   lastTargetSignalMs = millis();
   if (!value.is<JsonArrayConst>()) return;
@@ -56,7 +49,7 @@ static void handleOffsetData(JsonVariantConst value) {
   if (arr.size() < 2) return;
   pendingOx        = arr[0] | 0;
   pendingOy        = arr[1] | 0;
-  hasPendingOffset = true;   // newer overwrites older — flushed once per loop tick
+  hasPendingOffset = true;  
 }
 
 void flushPendingOffset() {
@@ -70,9 +63,8 @@ static void handleIsFiringData(bool on) {
   setFiring(on);
 }
 
-// Jetson mission state. Vocabulary differs from the bench cmd schema:
-// idle / scanning / tracking / firing. tracking+firing both mean "target
-// acquired" → STATE_DETECTED. Entering scanning restarts the sweep from home.
+// Jetson mission state
+// idle / scanning / tracking / firing
 static void handleSystemStateData(const char* v) {
   if (!v) return;
   SystemState ns;
@@ -80,16 +72,14 @@ static void handleSystemStateData(const char* v) {
   else if (!strcmp(v, "scanning")) ns = STATE_SCANNING;
   else if (!strcmp(v, "tracking")) ns = STATE_DETECTED;
   else if (!strcmp(v, "firing"))   ns = STATE_DETECTED;
-  else return;   // unknown state ignored
+  else return;  
 
   if (ns != currentState) {
-    if (ns == STATE_SCANNING) scanReset();   // fresh sweep from vertical home
+    if (ns == STATE_SCANNING) scanReset();  
     currentState = ns;
     updateLeds();
 
-    // Emit a state-change event over USB serial so the host can verify the
-    // Arduino actually applied the message (debugging stuck-LED / no-scan
-    // issues where it's unclear whether the state ever crossed the wire).
+    // Emit state-change event over USB serial
     JsonDocument ev;
     ev["event"] = "state";
     ev["value"] = stateName(currentState);
@@ -103,12 +93,9 @@ static void dispatchPythonData(JsonDocument &doc) {
   if      (!strcmp(key, "current_target_offset")) handleOffsetData(doc["value"]);
   else if (!strcmp(key, "is_firing"))             handleIsFiringData(doc["value"] | false);
   else if (!strcmp(key, "system_state"))          handleSystemStateData(doc["value"] | (const char*)nullptr);
-  // unknown keys silently ignored
 }
 
-// =============================================================================
 // TOP-LEVEL DISPATCH
-// =============================================================================
 static void dispatchJson(JsonDocument &doc) {
   const char* type = doc["type"] | (const char*)nullptr;
   if (type) {

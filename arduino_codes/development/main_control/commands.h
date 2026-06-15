@@ -1,6 +1,4 @@
-// commands.h — bench `{"cmd":"..."}` handlers (manual / no Jetson).
-// Each writes its result into a passed-in JsonDocument that `dispatch.cpp`
-// then ships back. `cmdStatusJson` is a fire-and-forget send (no resp).
+// commands.h
 #pragma once
 
 #include <ArduinoJson.h>

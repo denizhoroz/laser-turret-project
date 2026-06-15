@@ -1,39 +1,20 @@
-// main_control.ino — turret production firmware (thin entry).
+// main_control.ino
 //
 // Modules in this sketch directory:
-//   config.h        — all constants (pins, timings, gains)
-//   types.h         — Sw struct, SystemState enum
-//   state.h/.cpp    — shared globals (currentState, laserFiring, halted, lastTargetSignalMs, swL/R/U/D)
-//   switches.h/.cpp — limit-switch debounce
-//   leds.h/.cpp     — green/yellow/red indicator logic
-//   motor.h/.cpp    — stepOnce + stepDelta primitive (limit-watching)
-//   laser.h/.cpp    — setFiring (PIN_LASER + LED coordinator)
-//   tracking.h/.cpp — applyOffset (pixel → step deltas). Parallax handled Python-side.
-//   PID.h/.cpp      — per-axis PID controller (offset px → step delta).
-//   scanning.h/.cpp — autonomous search sweep while STATE_SCANNING.
-//   limit_recovery.h/.cpp — autonomous backoff from triggered limit switches.
-//   commands.h/.cpp — bench {"cmd":"..."} handlers
-//   serial_link.h/.cpp — outbound JSON (events, status, acks)
-//   dispatch.h/.cpp — inbound line buffer + JSON parse + route
-//
-// Pin map: .schematic/components.md   ·   Project state: .schematic/status.md
-//
-// Motion model: pure step deltas. No position tracker, no homing, no software
-// range clamp — the only motion constraint is the live limit-switch check
-// inside stepDelta. Reason: mechanical stress can desync absolute tracker
-// from real motor position.
-//
-// JSON link (line-delimited JSON over USB Serial, both directions):
-//   Jetson -> Arduino (Python production schema):
-//     {"type":"data","key":"current_target_offset","value":[x,y]}
-//     {"type":"data","key":"is_firing","value":true|false}
-//   Bench / manual schema (acks back):
-//     {"cmd":"move","yaw":N,"pitch":M}
-//     {"cmd":"stop"} / {"cmd":"resume"}
-//     {"cmd":"state","value":"idle|scanning|detected"}
-//     {"cmd":"laser","on":true|false}
-//     {"cmd":"status"} / {"cmd":"ping"}
-//   Manual single-char bench cmds:  H - help · ? - status
+//   config.h        
+//   types.h         
+//   state.h/.cpp    
+//   switches.h/.cpp 
+//   leds.h/.cpp     
+//   motor.h/.cpp    
+//   laser.h/.cpp    
+//   tracking.h/.cpp 
+//   PID.h/.cpp      
+//   scanning.h/.cpp 
+//   limit_recovery.h/.cpp 
+//   commands.h/.cpp 
+//   serial_link.h/.cpp 
+//   dispatch.h/.cpp 
 
 #include "config.h"
 #include "state.h"
@@ -79,9 +60,7 @@ void loop() {
     feedSerialChar(Serial.read());
   }
 
-  // While the Jetson reports scanning, run the autonomous search sweep.
-  // Otherwise consume the freshest target offset (tracking). The two are
-  // mutually exclusive — Python sends no offsets while scanning.
+  // Run autonomous search sweep.
   if (currentState == STATE_SCANNING && !halted) {
     scanTick();
   } else {
@@ -89,8 +68,7 @@ void loop() {
   }
   recoverFromLimits();
 
-  // Refresh LEDs periodically so yellow drops when the target signal goes
-  // stale (no recent offset/fire message from Python).
+  // Refresh LEDs
   static unsigned long lastLedTick = 0;
   unsigned long now = millis();
   if (now - lastLedTick > 100) {

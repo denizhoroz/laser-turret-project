@@ -2,7 +2,7 @@
 #include <ArduinoJson.h>
 #include "serial_link.h"
 #include "state.h"
-#include "leds.h"     // stateName
+#include "leds.h"     
 
 void sendDoc(JsonDocument &doc) {
   serializeJson(doc, Serial);

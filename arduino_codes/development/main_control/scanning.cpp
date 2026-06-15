@@ -5,9 +5,7 @@
 #include "switches.h"
 #include "motor.h"
 
-// stepDelta sign convention (mirrors tracking.cpp / motor.h):
-//   pitch delta > 0 → toward swU (up).   delta < 0 → toward swD (down).
-//   yaw   delta > 0 → toward swR (right). delta < 0 → toward swL (left).
+// stepDelta sign convention
 enum ScanPhase {
   SCAN_HOMING_DOWN,
   SCAN_LEVELING,
@@ -29,7 +27,7 @@ void scanTick() {
 
   switch (phase) {
     case SCAN_HOMING_DOWN:
-      if (triggered(swD)) {                       // reached vertical home
+      if (triggered(swD)) {                       
         levelStepsLeft = PITCH_LEVEL_FROM_DOWN_STEPS;
         phase = SCAN_LEVELING;
         break;
@@ -39,7 +37,7 @@ void scanTick() {
       break;
 
     case SCAN_LEVELING:
-      if (levelStepsLeft <= 0 || triggered(swU)) {  // level reached (or ceiling)
+      if (levelStepsLeft <= 0 || triggered(swU)) {  
         phase = SCAN_SWEEP_RIGHT;
         break;
       }

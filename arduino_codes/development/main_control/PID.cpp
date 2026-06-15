@@ -4,9 +4,7 @@
 
 struct PidState {
   float         integral;
-  float         carry;       // fractional step remainder — sub-1.0 outputs accumulate here
-                             // until they cross ±1 and commit a step. Without this, low Kp
-                             // values would silently round to 0 and the head gets stuck.
+  float         carry;      
   int           prevError;
   unsigned long prevMs;
 };
@@ -14,11 +12,7 @@ struct PidState {
 static PidState yaw   = {0.0f, 0.0f, 0, 0};
 static PidState pitch = {0.0f, 0.0f, 0, 0};
 
-// dt seed used on the very first call (prevMs == 0). Roughly matches the
-// Python detection cadence so the initial integral/derivative aren't garbage.
 static constexpr float PID_FIRST_DT_S = 0.05f;
-// Upper clamp on dt to absorb long gaps (target loss, mission pause) without
-// the integral/derivative spiking.
 static constexpr float PID_MAX_DT_S   = 0.5f;
 
 static long pidCompute(int error, float Kp, float Ki, float Kd,
@@ -49,10 +43,9 @@ static long pidCompute(int error, float Kp, float Ki, float Kd,
 
   float output = Kp * (float)error + Ki * s.integral + Kd * derivative;
 
-  // Accumulate fractional output. Small Kp·error values (< 1.0) would otherwise
-  // truncate to 0 and the head stalls just outside the deadzone.
+  // Accumulate fractional output
   s.carry += output;
-  long steps = (long)s.carry;        // truncates toward zero — fractional remainder kept
+  long steps = (long)s.carry;   // truncates toward zero
   s.carry  -= (float)steps;
   if (steps >  MAX_STEP_PER_TICK) steps =  MAX_STEP_PER_TICK;
   if (steps < -MAX_STEP_PER_TICK) steps = -MAX_STEP_PER_TICK;

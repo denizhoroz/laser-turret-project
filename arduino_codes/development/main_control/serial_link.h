@@ -1,5 +1,4 @@
-// serial_link.h — outbound JSON to Jetson (and bench operator).
-// Low-level emit primitives only. Inbound parsing lives in dispatch.h.
+// serial_link.h 
 #pragma once
 
 #include <ArduinoJson.h>

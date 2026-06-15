@@ -2,7 +2,7 @@
 #include "motor.h"
 #include "config.h"
 #include "switches.h"
-#include "serial_link.h"   // sendEventLimit
+#include "serial_link.h" 
 
 void stepOnce(int stepPin, unsigned long pulseUs) {
   digitalWrite(stepPin, HIGH);

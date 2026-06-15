@@ -1,5 +1,4 @@
-// state.h — shared globals for main_control modules.
-// One copy lives in state.cpp; every other module sees them via extern.
+// state.h
 #pragma once
 
 #include "types.h"
@@ -8,6 +7,6 @@
 extern SystemState   currentState;
 extern bool          laserFiring;
 extern bool          halted;
-extern unsigned long lastTargetSignalMs;   // last Python target signal (offset / is_firing)
+extern unsigned long lastTargetSignalMs;
 
 extern Sw swL, swR, swU, swD;
