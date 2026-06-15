@@ -1,9 +1,5 @@
-"""Jetson side entry point.
+"""Jetson side entry point."""
 
-Supervisor loop. Builds a session (Link to GS + ArduLink to Arduino + SystemState),
-runs the recv loop, and recycles the whole session on disconnect or unhandled
-crash. Designed to run unattended inside the turret enclosure under systemd.
-"""
 from __future__ import annotations
 
 import logging
@@ -33,7 +29,6 @@ log = logging.getLogger("jetson")
 
 
 def setup_logging() -> None:
-    """stdout + rolling file. Systemd journal captures stdout."""
     fmt = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
     root = logging.getLogger()
     root.setLevel(logging.INFO)
@@ -56,7 +51,8 @@ def setup_logging() -> None:
 
 
 def run_session() -> None:
-    """One end-to-end session. Returns on disconnect; raises on fatal."""
+    """One end-to-end session"""
+
     host = os.environ.get("GS_HOST", "192.168.55.100")
     port = int(os.environ.get("GS_PORT", "9001"))
 
@@ -65,8 +61,6 @@ def run_session() -> None:
     link.connect()
     log.info("connected to ground station")
 
-    # Arduino link is independent of GS link. Failure here is fatal for the
-    # session — supervisor will retry next iteration.
     try:
         arduino = ArduLink(port=ARDUINO_PORT, baudrate=ARDUINO_BAUDRATE)
     except Exception as e:

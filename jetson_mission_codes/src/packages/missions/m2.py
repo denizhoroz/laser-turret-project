@@ -101,11 +101,7 @@ class Mission2:
             frame, boxes = res
             now = time.time()
 
-            # ---------- Forced-fire window expiry (failsafe-2 cleanup) ----------
-            # When the window closes: drop firing, blacklist the class, drop
-            # tracking, scan. During the window, normal tracking logic still
-            # runs so the motors keep following the moving target — only the
-            # in_roi-gated firing decision is overridden (see below).
+            # Forced-fire window expiry
             if failsafe_fire_until > 0.0 and now >= failsafe_fire_until:
                 if firing:
                     firing = False
@@ -131,12 +127,7 @@ class Mission2:
             if picked is not None and picked.class_name:
                 last_picked_name = picked.class_name.lower()
 
-            # Confirmation streak (only relevant while not yet tracking). A target
-            # must be picked for TARGET_CONFIRM_FRAMES frames before we leave
-            # scanning. Brief no-detection frames are absorbed by
-            # CANDIDATE_MISS_TOLERANCE so a real but flickery target can still
-            # accumulate its streak. Once tracking_active, brief misses are
-            # tolerated by the TIMEOUT grace further below.
+            # Confirmation streak (only relevant while not yet tracking)
             if picked is not None:
                 confirm_streak += 1
                 confirm_misses = 0
@@ -156,11 +147,6 @@ class Mission2:
                 print("[m2] target confirmed; tracking active")
 
             if tracking_active and picked is not None:
-                # If we're in loss-grace (lost_since set), require a reacq streak
-                # of LOSS_REACQUIRE_FRAMES consecutive picks before resetting the
-                # timer. Tentative picks below threshold send NO Arduino traffic,
-                # so a single false-positive flicker can't refresh the LED or
-                # extend the grace window.
                 if lost_since is not None:
                     reacq_streak += 1
                     if reacq_streak >= LOSS_REACQUIRE_FRAMES:
@@ -177,16 +163,12 @@ class Mission2:
                 self.offset, self.in_roi = tracker.track(picked)
 
                 # CONTINUOUS tracking — send offset every frame, even in ROI.
-                # This is the key behavioral difference from Mission 1.
                 self.system_state.send_data("current_target_offset", self.offset)
 
                 # Anchor failsafe-2 timer on first ROI entry for this lock.
                 if self.in_roi and roi_first_seen_at is None:
                     roi_first_seen_at = now
 
-                # Failsafe-2 forced fire overrides in_roi gating: motors keep
-                # tracking (offsets sent above), laser stays on until window
-                # ends. Otherwise normal in_roi-driven firing.
                 if in_failsafe_fire:
                     if not firing:
                         firing = True
@@ -208,13 +190,10 @@ class Mission2:
                     f"in_roi={self.in_roi} firing={firing}"
                 )
             else:
-                # Either scanning (target not yet confirmed) or tracking with the
-                # target missing this frame.
                 self.offset = (0, 0)
                 self.in_roi = False
 
-                # Target lost mid forced-fire — kill window now so the next
-                # iteration's expiry-cleanup branch fires and blacklists.
+                # Target lost mid forced-fire
                 if in_failsafe_fire:
                     failsafe_fire_until = now
                     print("[m2] FAILSAFE-2 cut short — target lost mid-fire")
@@ -276,8 +255,7 @@ class Mission2:
 
             self.system_state.send_frame(frame, boxes)
 
-        # Cleanup: ensure laser flag and state are released before returning
-        # to caller (state.py's finally also resets to idle).
+        # Cleanup: ensure laser flag and state are released before returning to caller.
         if firing:
             self.system_state.send_data("is_firing", False)
         detector.close_camera()

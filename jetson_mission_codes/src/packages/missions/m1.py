@@ -24,7 +24,7 @@ class Mission1:
 
         # Mission specific parameters
         self.target_ids: list[float] = [0, 1, 2, 3, 4]
-        self.target_pool: list[float] = [] # Targets that have been shot at least once
+        self.target_pool: list[float] = [] 
         self.selected_target_id: float | None = None
         self.selected_box: Rectangle | None = None
         self.offset: tuple[int, int] = (0, 0)
@@ -239,7 +239,7 @@ class Mission1:
                 in_roi_since = None  # reset on drop-out
 
             self.system_state.send_frame(frame, boxes)
-            # detector.display(frame, boxes, tracker=tracker, selected_id=self.selected_target_id, offset=self.offset) # local cv window (disabled — viewing on web)
+            # detector.display(frame, boxes, tracker=tracker, selected_id=self.selected_target_id, offset=self.offset) # debug
 
     def is_target_in_pool(self, target_id):
         """Checks if the target ID is in the target pool."""

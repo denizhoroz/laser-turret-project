@@ -1,14 +1,5 @@
-"""Manual Arduino serial tester.
+"""Manual Arduino serial tester."""
 
-Sends the same JSON messages main.py would send via SystemState.send_data,
-so you can validate motor_serial_test.ino without running a full mission.
-
-Run from src/:
-    python serial_test.py
-
-Override port/baud:
-    python serial_test.py --port COM5 --baud 115200
-"""
 from __future__ import annotations
 
 import argparse

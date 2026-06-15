@@ -31,13 +31,10 @@ class Tracker:
         # Define the center of the ROI and the center area of the detected box
         x1, y1, x2, y2 = map(int, box.xyxy)
 
-        # - Target Center Point — shifted UP by PARALLAX_BIAS_Y_PX so both the
-        #   commanded motor offset and the in_roi check refer to a virtual aim
-        #   point above the real bbox center. This puts the laser beam on the
-        #   target instead of the camera crosshair.
+        # Target Center Point
         self.TCPoint = ((x1 + x2) // 2, (y1 + y2) // 2 - PARALLAX_BIAS_Y_PX)
 
-        # - Target Center Area: rectangle scaled to bbox size via tcarea_ratio.
+        # Target Center Area
         bbox_w = max(1, x2 - x1)
         bbox_h = max(1, y2 - y1)
         tc_w = max(1, int(bbox_w * self.tcarea_ratio))
