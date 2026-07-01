@@ -3,19 +3,16 @@
 
 # 🎯 Laser Turret for Stationary and Moving Targets
 
-An affordable, fully autonomous laser turret that **detects, tracks, and fires** at targets using AI-based image processing — no human in the loop. Built as a Mechatronics Engineering graduation project (ENG402) at Istanbul Ticaret University.
+An affordable, fully autonomous laser turret that **detects, tracks, and fires** at targets using AI-based image processing. Built as a Mechatronics Engineering graduation project at Istanbul Ticaret University.
 
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue)
-![Platform](https://img.shields.io/badge/compute-Jetson%20Orin%20Nano-76B900)
-![MCU](https://img.shields.io/badge/MCU-Arduino%20Mega%202560-00979D)
 
 ## 🌟 Highlights
 
 - 🧠 **Real-time AI detection** — custom-trained YOLO model(s) runs on an NVIDIA Jetson Orin Nano
 - 🔭 **2-DOF turret** — pitch + yaw driven by NEMA 17 steppers via DRV8825 drivers, closed-loop PID tracking
 - 🛰️ **Live ground station** — browser dashboard streams the camera feed with detection overlays and dispatches missions
-- 🎛️ **Three coordinated subsystems** — Jetson (vision) ⇄ Arduino Mega (motion/laser) ⇄ Ground Station (control)
 - 🛡️ **Safety-first** — mechanical limit switches, scan-limit recovery, and a supervisor that auto-restarts on failure
 
 ## ℹ️ Overview
@@ -37,10 +34,10 @@ Each folder has its own README with setup and usage details.
 
 The Ground Station sends a numeric mission type; the Jetson maps it to a mission module:
 
-| Mission type | Module | Report testbed |
-| --- | --- | --- |
-| `1` | `m1` | Stationary target testbed (5 shapes) |
-| `2` | `m2` | Non-stationary (moving) target testbed |
+| Mission number | Report testbed |
+| --- | --- |
+| `1` | Stationary target testbed (5 shapes) |
+| `2` | Non-stationary (moving) target testbed |
 
 ## 📄 License
 
