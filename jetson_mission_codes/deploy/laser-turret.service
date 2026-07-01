@@ -14,8 +14,6 @@ Restart=always
 RestartSec=3
 StandardOutput=journal
 StandardError=journal
-# Give python access to v4l2 / serial devices via group membership; do not
-# escalate any further than needed.
 SupplementaryGroups=dialout video
 
 [Install]
