@@ -1,4 +1,4 @@
-# 🧠 Jetson Mission Code
+# Jetson Mission Code
 
 The turret's brain. Runs on the **NVIDIA Jetson Orin Nano**: it captures the camera feed, runs YOLO detection and target tracking, drives the Arduino over serial, and reports to the Ground Station.
 
@@ -47,44 +47,6 @@ jetson_mission_codes/
 | `m2` | `missions/m2.py` | Moving target testbed |
 | `td` | `missions/test_detect.py` | Detection-only bring-up test |
 
-## ⬇️ Installation
-
-Requires **Python 3.12+**, a CUDA-capable device, and the Arduino connected over USB.
-
-**On the Jetson (JetPack ships PyTorch/torchvision):**
-
-```bash
-cd jetson_mission_codes
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements-jetson.txt
-```
-
-**On an x86 dev machine (fully pinned, includes CUDA torch):**
-
-```bash
-pip install -r requirements.txt
-```
-
-> ⚠️ `requirements.txt` pins `torch==2.11.0+cu128` / `torchvision==0.26.0+cu128` (CUDA 12.8), intended for a desktop dev box. On the Jetson, use `requirements-jetson.txt` instead and rely on the JetPack-provided PyTorch build — mixing the two will break the CUDA setup.
-
-## 🚀 Usage
-
-Run from the `src/` directory so the `packages` import path resolves:
-
-```bash
-cd src
-python main.py
-```
-
-The supervisor will connect to the Ground Station, then wait for a mission to be dispatched from the dashboard. Logs stream to the console and rotate into `jetson_mission_codes/logs/jetson.log`.
-
-To sanity-check the Arduino link on its own:
-
-```bash
-python serial_test.py
-```
-
 ### ⚙️ Environment variables
 
 | Variable | Default | Purpose |
@@ -108,10 +70,6 @@ journalctl -u laser-turret -f          # follow logs
 ```
 
 > The unit runs as user `jetson` with `dialout` (serial) and `video` (camera) groups. Adjust the paths/user if your layout differs.
-
-## 🧠 Models
-
-`src/packages/models/` holds a trained YOLO weight file (`best.pt`) per target set — `model-target1` for the stationary shapes, `model-target2` for the moving target. Swap in your own weights by replacing these files (see the training notebook in the project report, Appendix B).
 
 ## 🔗 Related
 
