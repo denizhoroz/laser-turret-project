@@ -15,7 +15,7 @@ Embedded C++ firmware for the laser turret's motion/laser/safety layer and for t
 ```
 arduino_codes/
 ├── development/
-│   ├── main_control/          # Turret firmware (Arduino Mega 2560)  ← flash this
+│   ├── main_control/          # Turret firmware (Arduino Mega 2560)
 │   │   ├── main_control.ino    # setup()/loop() entry point
 │   │   ├── config.h            # pins, baud, motor timing, PID gains, scan params
 │   │   ├── state.*             # system state machine
