@@ -1,7 +1,4 @@
 // GENERAL TEST — all turret components, serial-menu driven.
-// Pin map + tunables: config.h (next to this file).
-// Pin map authoritative source: .schematic/components.md.
-// Project state + open issues: .schematic/status.md.
 
 #include "config.h"
 #include "types.h"
