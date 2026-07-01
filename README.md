@@ -5,8 +5,10 @@
 
 An affordable, fully autonomous laser turret that **detects, tracks, and fires** at targets using AI-based image processing. Built as a Mechatronics Engineering graduation project at Istanbul Ticaret University.
 
-![License](https://img.shields.io/badge/license-MIT-green)
-![Python](https://img.shields.io/badge/python-3.12%2B-blue)
+<p align="center">
+  <img src="https://img.shields.io/badge/license-MIT-green">
+  <img src="https://img.shields.io/badge/python-3.12%2B-blue">
+</p>
 
 ## 🌟 Highlights
 
