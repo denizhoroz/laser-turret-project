@@ -45,7 +45,6 @@ jetson_mission_codes/
 | --- | --- | --- |
 | `m1` | `missions/m1.py` | Stationary target testbed |
 | `m2` | `missions/m2.py` | Moving target testbed |
-| `td` | `missions/test_detect.py` | Detection-only bring-up test |
 
 ### ⚙️ Environment variables
 
