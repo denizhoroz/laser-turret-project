@@ -1,6 +1,4 @@
-<p align="center">
-  <img width="720" height="405" alt="cover" src="https://github.com/user-attachments/assets/aa3e9497-7395-458f-ae30-feaa93266cc9" />
-</p>
+<img width="1920" height="1080" alt="cover" src="https://github.com/user-attachments/assets/9c713508-e293-4549-9e0c-89a09f6ab994" />
 
 # 🎯 Laser Turret for Stationary and Moving Targets
 
