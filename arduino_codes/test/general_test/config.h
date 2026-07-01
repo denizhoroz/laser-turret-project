@@ -1,14 +1,10 @@
 // config.h — all tunables for general_test.ino
-// Edit values here, recompile. Sketch contains zero literal pin/timing constants.
-//
-// Pin map is authoritative in .schematic/components.md.
-// Project state + open issues in .schematic/status.md.
 
 #pragma once
 #include <Arduino.h>
 
 // =============================================================================
-// PINS (from .schematic/components.md)
+// PINS
 // =============================================================================
 constexpr int PIN_PITCH_STEP  = 12;
 constexpr int PIN_PITCH_DIR   = 11;
@@ -43,21 +39,13 @@ constexpr unsigned long RELEASE_CLEAR_MS = 250;  // continuous LOW required to d
 
 // =============================================================================
 // MOTORS
-//
-// Pulse half-period (HIGH and LOW phase each). Larger = slower step rate =
-// motor in higher-torque region of its curve. Software-only torque lever.
-// Real torque comes from DRV8825 Vref pot + microstep jumpers + supply voltage
-// (see .schematic/status.md "Pending").
 // =============================================================================
 constexpr unsigned long PITCH_PULSE_US = 2000;
 constexpr unsigned long YAW_PULSE_US   = 2000;
 
-constexpr unsigned long DIR_SETUP_MS         = 50;     // DRV8825 DIR setup
-constexpr long          MAX_SWEEP_STEPS      = 20000;  // safety cap per sweep
+constexpr unsigned long DIR_SETUP_MS         = 50;     
+constexpr long          MAX_SWEEP_STEPS      = 20000;  
 
-// Back-off after limit release. Must stay SMALL relative to axis travel.
-// Axis travel in full-step mode: pitch ~56 steps (~100°), yaw 150 steps (270°).
-// Old shared value of 100 steps overshot pitch entirely. Per-axis now.
 constexpr int           PITCH_SAFETY_MARGIN_STEPS = 3;  // ~5.4° clearance
 constexpr int           YAW_SAFETY_MARGIN_STEPS   = 8;  // ~14.4° clearance
 
