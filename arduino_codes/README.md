@@ -4,10 +4,10 @@ Embedded C++ firmware for the laser turret's motion/laser/safety layer and for t
 
 ## 🌟 Highlights
 
-- 🧩 **Modular turret firmware** — cleanly split into motor, laser, LED, scanning, tracking, PID, limit-recovery, and serial modules
+- 🧩 **Modular turret firmware** — structured into motor, laser, LED, scanning, tracking, PID, limit-recovery, and serial modules
 - 🎯 **Closed-loop aiming** — per-axis PID converts camera pixel offsets into stepper motion
 - 🛡️ **Hardware safety** — `INPUT_PULLUP` limit switches on all four axis ends with automatic recovery
-- 🔌 **Line-delimited JSON** over USB serial at **115200 baud** — same wire format the Jetson speaks
+- 🔌 **Line-delimited JSON** over USB serial at **115200 baud**, same wire format the Jetson speaks
 - 🎯 **Instrumented moving target** — photoresistor-based laser-hit detection with adaptive noise thresholding
 
 ## ℹ️ Overview
