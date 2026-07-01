@@ -3,5 +3,3 @@ model_building/
 jetson_mission_codes/venv
 ground_station/venv
 ground_station/PLAN.md
-
-.claude/
