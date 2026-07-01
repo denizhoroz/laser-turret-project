@@ -1,4 +1,4 @@
-# 🤖 Arduino Firmware
+# Arduino Firmware
 
 Embedded C++ firmware for the laser turret's motion/laser/safety layer and for the moving target. The turret firmware runs on an **Arduino Mega 2560**; the moving-target sketch runs on an **Arduino UNO R3**.
 
@@ -61,29 +61,12 @@ Defined in [`development/main_control/config.h`](development/main_control/config
 | Limit switches (Left / Right / Up / Down) | A12 / A13 / A14 / A15 |
 
 > ⚠️ These pins match the wiring in the project report's circuit diagram. If your build differs, edit `config.h` before flashing.
-
-## ⬇️ Installation & flashing
-
-Requires the [Arduino IDE](https://www.arduino.cc/en/software) (or `arduino-cli`).
-
-**Turret (Arduino Mega 2560):**
-
-1. Open the whole `development/main_control/` folder in the Arduino IDE (open `main_control.ino`; the IDE loads the sibling `.cpp`/`.h` files as tabs automatically).
-2. Select **Tools → Board → Arduino Mega or Mega 2560** and the correct serial port.
-3. Upload. The serial monitor at **115200 baud** should print `# main_control ready`.
-
-**Moving target (Arduino UNO R3):**
-
-1. Open `development/target2/target/target.ino`.
-2. Select **Tools → Board → Arduino Uno** and its port.
-3. Upload. Serial runs at **115200 baud** for diagnostics only.
-
 ## 🎛️ Configuration
 
-Most tuning lives in `config.h` — no code changes needed. Notable knobs:
+Most tuning lives in `config.h`. Notable knobs:
 
 - **Motion:** `PITCH_PULSE_US`, `YAW_PULSE_US`, `MAX_STEP_PER_TICK`, `DEAD_ZONE_PX_*`
-- **PID gains:** `PID_KP_YAW`, `PID_KD_YAW`, `PID_KP_PITCH`, `PID_KD_PITCH` (integral terms default to 0)
+- **PID gains:** `PID_KP_YAW`, `PID_KD_YAW`, `PID_KP_PITCH`, `PID_KD_PITCH`
 - **Scanning:** `SCAN_CHUNK_STEPS`, `SCAN_PULSE_US`, `MAX_SWEEP_STEPS`
 - **Switch debounce:** `DEBOUNCE_MS`, `RELEASE_CLEAR_MS`
 
