@@ -1,7 +1,4 @@
 // types.h — shared types for general_test.ino
-// Must live in a header (not the .ino) to defeat Arduino's auto-prototype
-// generator, which inserts function prototypes above any struct defined in
-// the .ino body. Including types here puts them above the auto-prototypes.
 
 #pragma once
 #include <Arduino.h>
